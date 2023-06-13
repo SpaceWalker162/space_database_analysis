@@ -10,6 +10,13 @@ import json
 import time
 import os
 import numpy as np
+import logging
+
+verbose = True
+loggingHandlers = [logging.FileHandler('download.log')]
+if verbose:
+    loggingHandlers.append(logging.StreamHandler())
+logging.basicConfig(level=logging.DEBUG, handlers=loggingHandlers)
 
 databaseDir = ('data/')
 
@@ -30,7 +37,8 @@ while currentDate != end + timedelta(days=1):
         os.makedirs(path)
     downloadedFileName = os.path.join(path, daysInYear + '.zip')
     url = urlBase + currentDate.strftime('%Y/%j')
+    logging.info("downloading: {}".format(url))
     fileSizeInM, timeCost, speed = dbt.download(url, fileName=downloadedFileName)
-    print("year: {}, date: {}\n size: {}M cost: {}, speed: {}"
+    logging.info("year: {}, date: {}\n size: {}M cost: {}, speed: {}"
           .format(year, daysInYear, fileSizeInM, timeCost, speed))
     currentDate = currentDate + timedelta(days=1)
