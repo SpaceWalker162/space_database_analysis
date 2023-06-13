@@ -4,7 +4,7 @@ import sys
 
 lostFiles = []
 lostFilesLogFileName = 'lost.log'
-for path in sys.arg[1:]:
+for path in sys.argv[1:]:
     print(path)
     files = os.listdir(path)
     for file in files:
