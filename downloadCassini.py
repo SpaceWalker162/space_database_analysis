@@ -18,21 +18,24 @@ if verbose:
     loggingHandlers.append(logging.StreamHandler())
 logging.basicConfig(level=logging.DEBUG, handlers=loggingHandlers)
 
-databaseDir = ('data/')
+logDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/.logFiles/')
+
+databaseDir = ('/media/yufei/Elements1/data/')
 
 urlBase = "https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/"
 #%%
-start = datetime(2004, 1, 1)
-end = datetime(2012, 1, 1) + timedelta(days=153)
-#interval = end - start
-#numberOfDays = interval.days
-currentDate = start
-while currentDate != end + timedelta(days=1):
-#for days in range(numberOfDays):
-#    currentDate = start + timedelta(days=days)
-    year = currentDate.strftime('%Y')
+with open("../.logFiles/lost.log", 'r') as f:
+    info = f.read().strip()
+fileNames = info.split(",")
+year = 2004
+for fileName in fileNames:
+    basename, ext = os.path.splitext(fileName)
+    print(basename)
+    print(int(basename)-1)
+    currentDate = datetime(year, 1, 1) + timedelta(days=(int(basename)-1))
+    yearStr = currentDate.strftime('%Y')
     daysInYear = currentDate.strftime('%j')
-    path = os.path.join(databaseDir, 'Cassini', 'CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0', year)
+    path = os.path.join(databaseDir, 'cassini', 'CAPS', 'CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0', yearStr)
     if not os.path.exists(path):
         os.makedirs(path)
     downloadedFileName = os.path.join(path, daysInYear + '.zip')
@@ -42,3 +45,24 @@ while currentDate != end + timedelta(days=1):
     logging.info("year: {}, date: {}\n size: {}M cost: {}, speed: {}"
           .format(year, daysInYear, fileSizeInM, timeCost, speed))
     currentDate = currentDate + timedelta(days=1)
+
+#start = datetime(2004, 1, 1)
+#end = datetime(2012, 1, 1) + timedelta(days=153)
+##interval = end - start
+##numberOfDays = interval.days
+#currentDate = start
+#while currentDate != end + timedelta(days=1):
+##for days in range(numberOfDays):
+##    currentDate = start + timedelta(days=days)
+#    year = currentDate.strftime('%Y')
+#    daysInYear = currentDate.strftime('%j')
+#    path = os.path.join(databaseDir, 'Cassini', 'CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0', year)
+#    if not os.path.exists(path):
+#        os.makedirs(path)
+#    downloadedFileName = os.path.join(path, daysInYear + '.zip')
+#    url = urlBase + currentDate.strftime('%Y/%j')
+#    logging.info("downloading: {}".format(url))
+#    fileSizeInM, timeCost, speed = dbt.download(url, fileName=downloadedFileName)
+#    logging.info("year: {}, date: {}\n size: {}M cost: {}, speed: {}"
+#          .format(year, daysInYear, fileSizeInM, timeCost, speed))
+#    currentDate = currentDate + timedelta(days=1)

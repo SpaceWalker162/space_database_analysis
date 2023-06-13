@@ -1,0 +1,119 @@
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 082
+ size: 0.0M cost: 0:00:01.872862, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 082
+ size: 0.0M cost: 0:00:01.141643, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 082
+ size: 0.0M cost: 0:00:02.837640, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/061
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/061 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 061
+ size: 0.0M cost: 0:00:01.122142, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/068
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/068 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 068
+ size: 0.0M cost: 0:00:01.157738, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/070
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/070 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 070
+ size: 0.0M cost: 0:00:01.136150, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/042
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/042 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 042
+ size: 0.0M cost: 0:00:01.156716, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/080
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/080 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 080
+ size: 0.0M cost: 0:00:01.127525, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/063
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/063 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 063
+ size: 0.0M cost: 0:00:01.159245, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/062
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/062 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 062
+ size: 0.0M cost: 0:00:01.144069, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/065
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/065 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 065
+ size: 0.0M cost: 0:00:01.156181, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/067
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/067 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 067
+ size: 0.0M cost: 0:00:01.789996, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/066
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/066 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 066
+ size: 0.0M cost: 0:00:01.126534, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/189
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/189 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 189
+ size: 0.0M cost: 0:00:01.135039, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/188
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/188 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 188
+ size: 0.0M cost: 0:00:01.768238, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/083
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/083 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 083
+ size: 0.0M cost: 0:00:01.155509, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/071
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/071 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 071
+ size: 0.0M cost: 0:00:01.150262, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/190
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/190 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 190
+ size: 0.0M cost: 0:00:01.439463, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/187
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/187 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 187
+ size: 0.0M cost: 0:00:01.150588, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/081
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/082 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 082
+ size: 0.0M cost: 0:00:01.197907, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/061
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/061 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 061
+ size: 0.0M cost: 0:00:01.500483, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/068
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/068 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 068
+ size: 0.0M cost: 0:00:01.145338, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/070
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
+DEBUG:urllib3.connectionpool:https://pds-ppi.igpp.ucla.edu:443 "GET /ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/070 HTTP/1.1" 200 142
+INFO:root:year: 2004, date: 070
+ size: 0.0M cost: 0:00:01.180145, speed: 0.0
+INFO:root:downloading: https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/2004/042
+DEBUG:urllib3.connectionpool:Starting new HTTPS connection (1): pds-ppi.igpp.ucla.edu:443
