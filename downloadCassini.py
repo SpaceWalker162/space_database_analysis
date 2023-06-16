@@ -23,7 +23,13 @@ logDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/.logFiles
 databaseDir = ('/media/yufei/Elements1/data/')
 
 urlBase = "https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/CO-E_J_S_SW-CAPS-3-CALIBRATED-V1.0/DATA/CALIBRATED/"
-#%%
+#
+instrumentation = ['cassini', 'MAG', 'CO-E_SW_J_S-MAG-3-RDR-FULL-RES-V2.0', 'DATA']
+urlBase = "https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/{ins:}/DATA/{year:}/{days:}"
+
+urlBase = "https://pds-ppi.igpp.ucla.edu/ditdos/download?id=pds://PPI/{ins:}/DATA/2004/001_031_JAN"
+
+
 with open("../.logFiles/lost.log", 'r') as f:
     info = f.read().strip()
 fileNames = info.split(",")
