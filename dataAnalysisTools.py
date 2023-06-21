@@ -763,6 +763,30 @@ def cartesian2spherical(vectors):
     return np.concatenate((r[..., None], thetaPhi), axis=-1)
 
 
+def vectorRThetaPhi2VectorCartesian(pos, vector):
+    '''
+    Purpose:
+    Parameters:
+        pos: an array [..., 3], representing position of the vector. The last dimension represent three components in Cartesian coordinates.
+        vector: an array [..., 3]. The last dimension represent three vector components v_r, v_theta, v_phi, which have identical units.
+    Return:
+        vectorCartesian: an array [..., 3]
+    '''
+    r = np.linalg.norm(pos, axis=-1)
+    x, y, z = np.moveaxis(pos, -1, 0)
+    rtp2xyzMat = np.zeros(pos.shape+(3,)) 
+    rtp2xyzMat[..., 0, 0] = x/r
+    rtp2xyzMat[..., 0, 1] = y/r
+    rtp2xyzMat[..., 0, 2] = z/r
+    rtp2xyzMat[..., 1, 0] = -y/r
+    rtp2xyzMat[..., 1, 1] = x/r
+    rtp2xyzMat[..., 2, 0] = x*z/r**2
+    rtp2xyzMat[..., 2, 1] = z*y/r**2
+    rtp2xyzMat[..., 2, 2] = (-x*y-x**2)/r**2
+    vectorCartesian = np.sum(vector[..., :, None] * rtp2xyzMat, axis=-2)
+    return vectorCartesian
+
+
 def unitVectorFromCartesian2SphericalOld(unitVectors, halfSphere=True, twopi=True):
     '''
     Parameters:
@@ -841,6 +865,8 @@ def sphericalAngleTransform(data, coordinate=None, standardOutRange=True, inRang
         else:
             if all(np.abs(np.array(inRange) - np.array([-1, 1])*np.pi/2) < 10**(-5)):
                 dataTransformed = np.pi/2 - data
+            elif all(np.abs(np.array(inRange) - np.array([-1, 1])*90) < 10**(-5)):
+                dataTransformed = np.pi/2 - data/180*np.pi
             else:
                 raise Exception('bad input range')
     if coordinate == 'phi':
@@ -854,6 +880,9 @@ def sphericalAngleTransform(data, coordinate=None, standardOutRange=True, inRang
         else:
             if all(np.abs(np.array(inRange) - np.array([-1, 1])*np.pi) < 10**(-5)):
                 dataTransformed = data + (np.sign(data) - 1)*np.sign(data)*np.pi
+            elif all(np.abs(np.array(inRange) - np.array([0, 24])) < 10**(-5)):
+                data_ = (data - 12)/12*np.pi
+                dataTransformed = data_ + (np.sign(data_) - 1)*np.sign(data_)*np.pi
             else:
                 raise Exception('bad input range')
     return dataTransformed
@@ -1069,53 +1098,56 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
     tUpIntersection = (360 - upAngleStart)*(t[upArgs+1] - t[upArgs])/(upAngleEnd - upAngleStart) + t[upArgs]
     numberOfUpIntersection = len(tUpIntersection)
     logging.debug('number of up intersection: {}'.format(numberOfUpIntersection))
-    logging.debug('up intersection:')
-    logging.debug(cdflib.cdfepoch.breakdown(tUpIntersection))
-    data = np.stack([angle, t], axis=-1)
-    dataUpBlocks = makeBlocks(data, upArgs+1)
-    for upBlockInd in range(numberOfUpIntersection+1):
-        dataUpBlock = dataUpBlocks[upBlockInd]
-        if upBlockInd < numberOfUpIntersection:
-            dataUpBlock = np.append(dataUpBlock, np.array([360, tUpIntersection[upBlockInd]])[None, :], axis=0)
-        if upBlockInd > 0:
-            dataUpBlock = np.insert(dataUpBlock, 0, np.array([0, tUpIntersection[upBlockInd-1]])[None, :], axis=0)
-        angle = dataUpBlock[:, 0]
-        t = dataUpBlock[:, -1]
-        deltaAngle = np.diff(angle, axis=0)
-        downArgs, = np.nonzero(deltaAngle >= 180)
-        logging.debug("current up intersection:")
-        logging.debug(cdflib.cdfepoch.breakdown(t[0]))
-        tOfInterest = Epoch(dateTime=datetime(2002, 2, 9, 0, 34, 0)).epoch
-        if np.abs(tOfInterest - t[0]) < 5000:
-            logging.debug('current block:')
-            logging.debug(cdflib.cdfepoch.breakdown(dataUpBlock[:, -1]))
-            logging.debug('angle:')
-            logging.debug(dataUpBlock[:, 0])
-            logging.debug('down args:')
-            logging.debug(downArgs)
-        if len(downArgs) > 0:
-            downAngleStart = angle[downArgs]
-            downAngleEnd = angle[downArgs+1] - 360
-            tDownIntersection = -downAngleStart*(t[downArgs+1] - t[downArgs])/(downAngleEnd - downAngleStart) + t[downArgs]
-            dataDownBlocks = makeBlocks(dataUpBlock, downArgs+1)
-            numberOfDownIntersection = len(tDownIntersection)
-            logging.debug('number of down intersection: {}'.format(numberOfDownIntersection))
-            for downBlockInd in range(numberOfDownIntersection+1):
-                dataDownBlock = dataDownBlocks[downBlockInd]
-                if downBlockInd < numberOfDownIntersection:
-                    dataDownBlock = np.append(dataDownBlock, np.array([0, tDownIntersection[downBlockInd]])[None, :], axis=0)
-                if downBlockInd > 0:
-                    dataDownBlock = np.insert(dataDownBlock, 0, np.array([360, tDownIntersection[downBlockInd-1]])[None, :], axis=0)
-                if np.abs(tOfInterest - t[0]) < 5000:
-                    logging.debug('current down block:')
-                    logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[:, -1]))
-                    logging.debug('angle:')
-                    logging.debug(dataDownBlock[:, 0])
-                logging.debug("current down intersection:")
-                logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[0, -1]))
-                plot_, = ax.plot(dataDownBlock[:, -1], dataDownBlock[:, 0], **para)
-        else:
-            plot_, = ax.plot(dataUpBlock[:, -1], dataUpBlock[:, 0], **para)
+    if numberOfUpIntersection > 0:
+        logging.debug('up intersection:')
+        logging.debug(cdflib.cdfepoch.breakdown(tUpIntersection))
+        data = np.stack([angle, t], axis=-1)
+        dataUpBlocks = makeBlocks(data, upArgs+1)
+        for upBlockInd in range(numberOfUpIntersection+1):
+            dataUpBlock = dataUpBlocks[upBlockInd]
+            if upBlockInd < numberOfUpIntersection:
+                dataUpBlock = np.append(dataUpBlock, np.array([360, tUpIntersection[upBlockInd]])[None, :], axis=0)
+            if upBlockInd > 0:
+                dataUpBlock = np.insert(dataUpBlock, 0, np.array([0, tUpIntersection[upBlockInd-1]])[None, :], axis=0)
+            angle = dataUpBlock[:, 0]
+            t = dataUpBlock[:, -1]
+            deltaAngle = np.diff(angle, axis=0)
+            downArgs, = np.nonzero(deltaAngle >= 180)
+            logging.debug("current up intersection:")
+            logging.debug(cdflib.cdfepoch.breakdown(t[0]))
+            tOfInterest = Epoch(dateTime=datetime(2002, 2, 9, 0, 34, 0)).epoch
+            if np.abs(tOfInterest - t[0]) < 5000:
+                logging.debug('current block:')
+                logging.debug(cdflib.cdfepoch.breakdown(dataUpBlock[:, -1]))
+                logging.debug('angle:')
+                logging.debug(dataUpBlock[:, 0])
+                logging.debug('down args:')
+                logging.debug(downArgs)
+            if len(downArgs) > 0:
+                downAngleStart = angle[downArgs]
+                downAngleEnd = angle[downArgs+1] - 360
+                tDownIntersection = -downAngleStart*(t[downArgs+1] - t[downArgs])/(downAngleEnd - downAngleStart) + t[downArgs]
+                dataDownBlocks = makeBlocks(dataUpBlock, downArgs+1)
+                numberOfDownIntersection = len(tDownIntersection)
+                logging.debug('number of down intersection: {}'.format(numberOfDownIntersection))
+                for downBlockInd in range(numberOfDownIntersection+1):
+                    dataDownBlock = dataDownBlocks[downBlockInd]
+                    if downBlockInd < numberOfDownIntersection:
+                        dataDownBlock = np.append(dataDownBlock, np.array([0, tDownIntersection[downBlockInd]])[None, :], axis=0)
+                    if downBlockInd > 0:
+                        dataDownBlock = np.insert(dataDownBlock, 0, np.array([360, tDownIntersection[downBlockInd-1]])[None, :], axis=0)
+                    if np.abs(tOfInterest - t[0]) < 5000:
+                        logging.debug('current down block:')
+                        logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[:, -1]))
+                        logging.debug('angle:')
+                        logging.debug(dataDownBlock[:, 0])
+                    logging.debug("current down intersection:")
+                    logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[0, -1]))
+                    plot_, = ax.plot(dataDownBlock[:, -1], dataDownBlock[:, 0], **para)
+            else:
+                plot_, = ax.plot(dataUpBlock[:, -1], dataUpBlock[:, 0], **para)
+    else:
+        plot_, = ax.plot(t, angle, **para)
     return plot_
 
 
