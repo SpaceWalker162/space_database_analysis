@@ -827,3 +827,62 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
         else:
             dataAux[var] = cdfFile.varget(var)
     return dataMajor, dataAux
+
+
+def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', sep=None):
+    infoFile = fileName + infoFileExtension
+    xmlTree = ET.parse(infoFile)
+    root = xmlTree.getroot()
+    for l1 in root:
+        if 'File_Area_Observational' in l1.tag:
+            for l2 in l1:
+                if 'Table_Character' in l2.tag:
+                    for l3 in l2:
+                        if 'Record_Character' in l3.tag:
+                            record_character = l3
+    dataDict = {}
+    columnNames = []
+    for child in record_character:
+        if 'Field_Character' in child.tag:
+            for field in child:
+                tagName = field.tag.split('}')[-1]
+                if tagName == 'name':
+                    columnName = field.text
+                    columnNames.append(columnName)
+                    dataDict[columnName] = {}
+                    break
+            else:
+                raise Exception("Didn't find name!")
+            for field in child:
+                tagName = field.tag.split('}')[-1]
+                dataDict[columnName][tagName] = field.text
+    if dataFileExtension.lower() == '.tab':
+        dataFile = fileName + dataFileExtension
+    with open(dataFile, 'r') as f:
+        info = f.readlines()
+
+    for lineInd, line in enumerate(info):
+        if sep is None:
+            lineInfo = info[lineInd].strip().split()
+        else:
+            lineInfo = info[lineInd].strip().split(sep=sep)
+        for columnInd, columnInfo in enumerate(lineInfo):
+            columnName = columnNames[columnInd]
+            dataType = dataDict[columnName]['data_type']
+            if dataType == 'ASCII_Date_Time_YMD_UTC':
+                dateStr = columnInfo[:-1]
+                yearmmdd, hhmmss = dateStr.split('T')
+                year, month, day = yearmmdd.split('-')
+                hour, minute, secondInfo = hhmmss.split(':')
+                second, millisecond = secondInfo.split('.')
+                data_ = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(millisecond)*1000)))
+            elif dataType == 'ASCII_String':
+                data_ = columnInfo
+            elif dataType in ['ASCII_Integer', 'ASCII_Real']:
+                data_ = float(columnInfo)
+            if lineInd == 0:
+                dataDict[columnName]['data'] = []
+            dataDict[columnName]['data'].append(data_)
+    for key in dataDict.keys():
+        dataDict[key]['data'] = np.array(dataDict[key]['data'])
+    return dataDict, columnNames
