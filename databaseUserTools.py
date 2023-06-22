@@ -18,6 +18,7 @@ from scipy.optimize import fsolve
 from scipy.optimize import curve_fit
 import scipy.interpolate as interpolate
 import scipy.special
+import xml.etree.ElementTree as ET
 from databaseTools import *
 import logging
 from wolframclient.language import wl
