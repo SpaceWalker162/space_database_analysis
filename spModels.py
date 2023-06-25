@@ -192,3 +192,90 @@ def J05ReferenceR(theta, phi, a11 = 0.45, a22 = 1, a33 = 0.8, a12 = 0.18, a14 = 
     output=(0.5*aux9)/(aux14-(a11*(np.cos(((2.*phi)+(-2.*theta))))));
     # the foregoing code is converted from mathematica
     return output/R0
+
+
+class bowShockAndMagnetopausePositionModels:
+    def __init__(self, wlPath=None, modelName=None, **modelParas):
+        self.modelName = modelName
+        '''
+        Parameters:
+            wlPath: the path to wolframkernel, for example, '/usr/local/Wolfram/Mathematica/12.0/Executables/WolframKernel'
+            modelName: Joy02BS, Joy02MP (doi:10.1029/2001JA009146)
+        '''
+        if wlPath is not None:
+            self.wlSession = WolframLanguageSession(wlPath)
+            self.modelParas = modelParas
+        if self.modelName in ['Joy02BS', 'Joy02MP']:
+            self.initMathematicaModel()
+
+    def initMathematicaModel(self):
+        if self.modelName == 'Joy02BS':
+            initJoy02Model(self.wlSession, model='BS', **self.modelParas)
+        elif self.modelName == 'Joy02MP':
+            initJoy02Model(self.wlSession, model='MP', **self.modelParas)
+
+    def calculatePosition(self, pos, returnR=True, returnXYZ=False):
+        '''
+        Parameters:
+            pos: position, an array of [..., 2]. The last dimension represent theta and phi
+        Return:
+            posLastEles: r
+        '''
+        shape = pos.shape
+        pos_ = pos.reshape((-1, shape[-1]))
+        numberOfPoints = len(pos_)
+        posLastEles = np.zeros(numberOfPoints)
+        for ind in range(numberOfPoints):
+            theta = pos_[ind, 0]
+            phi = pos_[ind, 1]
+            wlCMD = '''rInThetaPhi/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
+            '''.format(theta=theta, phi=phi)
+            posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+            assert not np.all(posLastEle_ > 0)
+            posLastEle_ = np.max(posLastEle_)
+            assert posLastEle_ > 0
+            posLastEles[ind] = posLastEle_
+        posLastEles = posLastEles.reshape(shape[:-1])
+        returnedVariables = []
+        if returnR:
+            r = posLastEles
+            returnedVariables.append(r)
+        if returnXYZ:
+            r = posLastEles
+            theta = pos[:, 0]
+            phi = pos[:, 1]
+            x = r * np.sin(theta) * np.cos(phi)
+            y = r * np.sin(theta) * np.sin(phi)
+            z = r * np.cos(theta)
+            posXYZ = np.concatenate([x[:, None], y[:, None], z[:, None]], axis=1)
+            returnedVariables.append(posXYZ)
+        return returnedVariables
+
+
+def initJoy02Model(wlSession, model=None, dynamicPressure=None):
+    '''
+    Purpose: obtain the location of Jovian bow shock and magnetopause using the model doi:10.1029/2001JA009146
+    Parameters:
+        wlSession: a wolframe session
+        model: 'BS' or 'MP'
+        dynamicPressure: upstream solar wind dynamic pressure
+    '''
+    if model == 'BS':
+        a = -1.107 + 1.591*dynamicPressure**(-1/4)
+        b = -0.566 - 0.812*dynamicPressure**(-1/4)
+        c = 0.048 - 0.059*dynamicPressure**(-1/4)
+        d = 0.077 - 0.038*dynamicPressure
+        e = -0.874 - 0.299*dynamicPressure
+        f = -0.055 + 0.124*dynamicPressure
+    elif model == 'MP':
+        a = -0.134 + 0.488*dynamicPressure**(-1/4)
+        b = -0.581 - 0.225*dynamicPressure**(-1/4)
+        c = -0.186 - 0.016*dynamicPressure**(-1/4)
+        d = -0.014 + 0.096*dynamicPressure
+        e = -0.814 - 0.811*dynamicPressure
+        f = -0.050 + 0.168*dynamicPressure
+    initModelCMD = '''eq = eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
+   y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+        rInThetaPhi = r /. Solve[eq == 0, r];
+             '''.format(a=a, b=b, c=c, d=d, e=e, f=f)
+    wlSession.evaluate(initModelCMD)

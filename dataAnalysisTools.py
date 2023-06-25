@@ -19,6 +19,10 @@ import logging
 [A, B] means both A and B
 '''
 
+au_in_meters = 1.4959787 * 10**11
+radius_Earth_in_meters = 6.378137 * 10**6
+radius_Jupiter_in_meters = 6.9911 * 10**7
+
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff /nyq
@@ -765,7 +769,7 @@ def cartesian2spherical(vectors):
 
 def vectorRThetaPhi2VectorCartesian(pos, vector):
     '''
-    Purpose:
+    Purpose: v_r. v_theta, v_phi to v_x, v_y, v_z
     Parameters:
         pos: an array [..., 3], representing position of the vector. The last dimension represent three components in Cartesian coordinates.
         vector: an array [..., 3]. The last dimension represent three vector components v_r, v_theta, v_phi, which have identical units.
@@ -935,6 +939,22 @@ def spherical2cartesian(vectors):
         y = vectors[..., 0]*np.sin(vectors[..., 1])*np.sin(vectors[..., 2])
         z = vectors[..., 0]*np.cos(vectors[..., 1])
     return np.stack([x, y, z], axis=-1).squeeze()
+
+
+def cartesian1ToCartesian2(vecInC1, c1BasisInC2Basis=None, c2BasisInC1Basis=None):
+    '''
+    Purpose: transform vectors between cartesian coordinates
+    Parameter:
+        vecInC1: an array [..., 3]
+        c1BasisInC2Basis: an array [..., 3, 3]
+        c2BasisInC1Basis: an array [..., 3, 3]
+    '''
+    if c1BasisInC2Basis is not None:
+        vecInC2 = np.sum(vecInC1[..., None] * c1BasisInC2Basis, axis=-2)
+    elif c2BasisInC1Basis is not None:
+        vecInC2 = np.sum(vecInC1[..., None] * np.linalg.inv(c2BasisInC1Basis), axis=-2)
+    return vecInC2
+
 
 def angleBetweenVectors(v1, v2):
     '''
@@ -1300,3 +1320,19 @@ def plotPhaseSpaceDensityCut(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTab
     vMesh, vPhiMesh = np.meshgrid(vxyTable, vPhiTable, indexing='ij')
     ax.pcolormesh(vPhiMesh, vMesh, phaseSpaceDensityCut)
     ax.grid(True)
+
+def interp(x, xp, fp):
+    '''
+    Purpose: linear interpolation
+    Parameters:
+        x: the x-coordinates at which to evaluate the interpolated values
+        xp: 1-D array [n], the x-coordinates of the original data
+        fp: an array [n, ...], original data
+    '''
+    dataShape = fp.shape
+    data = fp.reshape([dataShape[0], -1])
+    data_interpolated = np.zeros([len(x), data.shape[-1]])
+    for ind in range(data.shape[-1]):
+        data_interpolated[:, ind] = np.interp(x, xp, data[:, ind])
+    return data_interpolated
+
