@@ -905,14 +905,15 @@ def ascii_date_time_ymd_utc2epoch(datetimeStr=None):
 def readHoriaonsData(dataFilePath):
     with open(dataFilePath, 'r') as f:
         info_ = f.readlines()
+
     info = []
     inTable = False
     for ind, line in enumerate(info_):
-        if line == '$$SOE':
+        if line.strip() == '$$EOE':
             inTable = False
         if inTable:
             info.append(line)
-        if line == '$$SOE':
+        if line.strip() == '$$SOE':
             inTable = True
             tableStartLine = ind
     columnNames_ = info_[tableStartLine-2].split(',')
@@ -920,12 +921,13 @@ def readHoriaonsData(dataFilePath):
 
     dataDict = {}
     for lineInd, line in enumerate(info):
-        lineInfo = info[lineInd].strip().split(',')
+        lineInfo = info[lineInd].strip(', \n\t').split(',')
+        lineInfo = [infoItem.strip() for infoItem in lineInfo]
         for columnInd, columnInfo in enumerate(lineInfo):
             columnName = columnNames[columnInd]
-            if columnName == 'Calender Date (TDB)':
+            if columnName == 'Calendar Date (TDB)':
                 columnInfo = columnInfo[:-5]
-                fmt = 'A.D. %Y-%b-%d %X'
+                fmt = 'A.D. %Y-%b-%d %H:%M:%S'
                 data_ = dat.datetime2epoch(datetime.strptime(columnInfo, fmt))
             else:
                 data_ = float(columnInfo)
