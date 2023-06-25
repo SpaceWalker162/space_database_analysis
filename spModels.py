@@ -214,27 +214,30 @@ class bowShockAndMagnetopausePositionModels:
         elif self.modelName == 'Joy02MP':
             initJoy02Model(self.wlSession, model='MP', **self.modelParas)
 
-    def calculatePosition(self, pos, returnR=True, returnXYZ=False):
+    def calculatePosition(self, pos, toCal='r', returnR=True, returnXYZ=False):
         '''
         Parameters:
-            pos: position, an array of [..., 2]. The last dimension represent theta and phi
+            pos: position, an array of [..., 2]. The last dimension is defined by posPara
+            toCal: if 'r', then the last dimension of pos represents theta and phi. If 'z', then the last dimension of pos are x and y.
+            posPara: a list of two elements. If ['theta', 'phi'], then the last dimension of pos are these components. Other possibility include but not limited to ['x', 'y'], ['r', 'theta']. Make sure the parameter follow the order r>theta>phi, x>y>z
         Return:
-            posLastEles: r
+            posLastEles: the last element other than posPara.
         '''
         shape = pos.shape
         pos_ = pos.reshape((-1, shape[-1]))
         numberOfPoints = len(pos_)
         posLastEles = np.zeros(numberOfPoints)
         for ind in range(numberOfPoints):
-            theta = pos_[ind, 0]
-            phi = pos_[ind, 1]
-            wlCMD = '''rInThetaPhi/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
-            '''.format(theta=theta, phi=phi)
-            posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
-            assert not np.all(posLastEle_ > 0)
-            posLastEle_ = np.max(posLastEle_)
-            assert posLastEle_ > 0
-            posLastEles[ind] = posLastEle_
+            if toCal == 'r':
+                theta = pos_[ind, 0]
+                phi = pos_[ind, 1]
+                wlCMD = '''rInThetaPhi/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
+                '''.format(theta=theta, phi=phi)
+                posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+                assert not np.all(posLastEle_ > 0)
+                posLastEle_ = np.max(posLastEle_)
+                assert posLastEle_ > 0
+                posLastEles[ind] = posLastEle_
         posLastEles = posLastEles.reshape(shape[:-1])
         returnedVariables = []
         if returnR:
@@ -274,8 +277,10 @@ def initJoy02Model(wlSession, model=None, dynamicPressure=None):
         d = -0.014 + 0.096*dynamicPressure
         e = -0.814 - 0.811*dynamicPressure
         f = -0.050 + 0.168*dynamicPressure
-    initModelCMD = '''eq = eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
+    initModelCMD = '''eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
    y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
         rInThetaPhi = r /. Solve[eq == 0, r];
+        eqXYZ = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2;
+        zInXY = z /. Solve[eqXYZ == 0, z]
              '''.format(a=a, b=b, c=c, d=d, e=e, f=f)
     wlSession.evaluate(initModelCMD)
