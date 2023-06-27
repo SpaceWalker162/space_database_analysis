@@ -22,6 +22,7 @@ import logging
 au_in_meters = 1.4959787 * 10**11
 radius_Earth_in_meters = 6.378137 * 10**6
 radius_Jupiter_in_meters = 6.9911 * 10**7
+radius_Saturn_in_meters = 5.8232 * 10**7
 
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
