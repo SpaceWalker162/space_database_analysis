@@ -234,7 +234,7 @@ def normalized(array, axis=-1):
     if dim == 1:
         array = array / norm_
     else:
-        array = array / norm_[..., None]
+        array = array / np.expand_dims(norm_, axis=axis)
     return  array
 
 
@@ -780,15 +780,25 @@ def vectorRThetaPhi2VectorCartesian(pos, vector):
     r = np.linalg.norm(pos, axis=-1)
     x, y, z = np.moveaxis(pos, -1, 0)
     rtp2xyzMat = np.zeros(pos.shape+(3,)) 
+#    rtp2xyzMat[..., 0, 0] = x/r
+#    rtp2xyzMat[..., 0, 1] = y/r
+#    rtp2xyzMat[..., 0, 2] = z/r
+#    rtp2xyzMat[..., 1, 0] = -y/r
+#    rtp2xyzMat[..., 1, 1] = x/r
+#    rtp2xyzMat[..., 2, 0] = x*z/r**2
+#    rtp2xyzMat[..., 2, 1] = z*y/r**2
+#    rtp2xyzMat[..., 2, 2] = (-x*y-x**2)/r**2
+#    vectorCartesian = np.sum(vector[..., :, None] * rtp2xyzMat, axis=-2)
     rtp2xyzMat[..., 0, 0] = x/r
     rtp2xyzMat[..., 0, 1] = y/r
     rtp2xyzMat[..., 0, 2] = z/r
-    rtp2xyzMat[..., 1, 0] = -y/r
-    rtp2xyzMat[..., 1, 1] = x/r
-    rtp2xyzMat[..., 2, 0] = x*z/r**2
-    rtp2xyzMat[..., 2, 1] = z*y/r**2
-    rtp2xyzMat[..., 2, 2] = (-x*y-x**2)/r**2
-    vectorCartesian = np.sum(vector[..., :, None] * rtp2xyzMat, axis=-2)
+    rtp2xyzMat[..., 1, 0] = x*z/r**2
+    rtp2xyzMat[..., 1, 1] = y*z/r**2
+    rtp2xyzMat[..., 1, 2] = -(x**2+y**2)/r**2
+    rtp2xyzMat[..., 2, 0] = -y/r
+    rtp2xyzMat[..., 2, 1] = x/r
+    rtp2xyzMat = normalized(rtp2xyzMat)
+    vectorCartesian = cartesian1ToCartesian2(vecInC1=vector, c2BasisInC1Basis=rtp2xyzMat)
     return vectorCartesian
 
 
