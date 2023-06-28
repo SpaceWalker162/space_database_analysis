@@ -205,6 +205,7 @@ class bowShockAndMagnetopausePositionModels:
         modelDict = {'Joy02BS': {'modelType': 'secondOrderSurface'},
                      'Joy02MP': {'modelType': 'secondOrderSurface'},
                      'Went11': {'modelType': 'conicSection'},
+                     'Kanani10': {'modelType': 'conicSection'},
                      }
         self.modelDict = modelDict
         if wlPath is not None:
@@ -235,7 +236,12 @@ class bowShockAndMagnetopausePositionModels:
             posLastEles: the last element other than posPara.
         '''
         shape = pos.shape
-        pos_ = pos.reshape((-1, shape[-1]))
+        if len(shape) > 1:
+            pos_ = pos.reshape((-1, shape[-1]))
+        elif len(shape) == 1:
+            pos_ = pos[None, :]
+        elif len(shape) == 0:
+            pos_ = np.array([[pos]])
         numberOfPoints = len(pos_)
         posLastEles = np.zeros(numberOfPoints)
         if self.modelType == 'secondOrderSurface':
@@ -264,6 +270,13 @@ class bowShockAndMagnetopausePositionModels:
                     '''.format(theta=theta)
                     posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
                     posLastEles[ind] = posLastEle_
+                elif toCal == 'z':
+                    x = pos_[ind, 0]
+                    y = pos_[ind, 1]
+                    wlCMD = '''z /. NSolve[(eqXYZ == 0)/.{{x->{x}, y->{y}}}, z, Reals]
+                    '''.format(x=x, y=y)
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
+                    posLastEles[ind] = np.max(posLastEle_[np.isreal(posLastEle_)])
                 else:
                     raise Exception('unknown toCal')
         posLastEles = posLastEles.reshape(shape[:-1])
@@ -272,7 +285,7 @@ class bowShockAndMagnetopausePositionModels:
 
 def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(3)):
     '''
-    Purpose: obtain the location of Jovian bow shock and magnetopause using the model doi:10.1029/2001JA009146
+    Purpose: obtain the location of Jovian bow shock and magnetopause using the model doi:10.1029/2001JA009146.
     Parameters:
         wlSession: a wolframe session
         model: 'BS' or 'MP'
@@ -309,7 +322,7 @@ def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(
 
 def initWent11Model(wlSession, dynamicPressure=None):
     '''
-    Purpose: obtain the location of Kronian bow shock using the model doi:10.1029/2010JA016349
+    Purpose: obtain the location of Kronian bow shock using the model doi:10.1029/2010JA016349. The coordinate system is the aberrated KSM system.
     Parameters:
         wlSession: a wolframe session
         dynamicPressure: upstream solar wind dynamic pressure
@@ -318,29 +331,31 @@ def initWent11Model(wlSession, dynamicPressure=None):
     c1 = 14.7
     c2 = 5.4
     epsilon = 0.84
-    c1PDYNc2 = c1 * dynamicPressure**(-1/c2)
-    initModelCMD = '''rInTheta = (1 + {epsilon}) {c1PDYNc2} / (1 + {epsilon} Cos[theta])
-             '''.format(c1PDYNc2=c1PDYNc2, epsilon=epsilon)
+    c1Pc2 = c1 * dynamicPressure**(-1/c2)
+    initModelCMD = '''rInTheta = (1 + {epsilon}) {c1Pc2} / (1 + {epsilon} Cos[theta]);
+                      eqRT = r - (1 + {epsilon}) {c1Pc2} / (1 + {epsilon} Cos[theta]);
+                      eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
+                      zInXY = \[Sqrt]({c1Pc2}^2 + 2 {c1Pc2}^2 {epsilon}+ {c1Pc2}^2 {epsilon}^2 - 2 {c1Pc2} {epsilon} x - 2 {c1Pc2} {epsilon}^2 x - x^2 + {epsilon}^2 x^2 - y^2);
+             '''.format(c1Pc2=c1Pc2, epsilon=epsilon)
     wlSession.evaluate(initModelCMD)
 
 
-def initKanani10Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
+def initKanani10Model(wlSession, dynamicPressure=None):
     '''
-    Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2009JA014262
+    Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2009JA014262. The coordinate system is KSM system.
     Parameters:
         wlSession: a wolframe session
         dynamicPressure: upstream solar wind dynamic pressure
         origin: the origin of the coordinate system in the unit of R_J
     '''
-    x0, y0, z0 = origin / 120
-    initModelCMD = '''eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
-   y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
-        rInThetaPhi = r /. Solve[eq == 0, r];
-        eqXYZ = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2;
-        eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
-        eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
-   y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
-        rInThetaPhiAtOriginXYZ0 = r /. Solve[eqRTPAtOriginXYZ0 == 0, r];
-        zInXY = z /. Solve[eqXYZ == 0, z]
-             '''.format(a=a, b=b, c=c, d=d, e=e, f=f, x0=x0, y0=y0, z0=z0)
+    a1 = 10.3
+    a2 = 0.2
+    a3 = 0.73
+    a4 = 0.4
+    r0 = a1 * dynamicPressure**(-a2)
+    K = a3 + a4 * dynamicPressure
+    initModelCMD = '''rInTheta = {r0} (2 / (1 + Cos[theta]))^{K};
+                      eqRT = r - {r0} (2 / (1 + Cos[theta]))^{K};
+                      eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
+             '''.format(r0=r0, K=K)
     wlSession.evaluate(initModelCMD)

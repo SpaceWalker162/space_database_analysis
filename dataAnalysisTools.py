@@ -19,6 +19,7 @@ import logging
 [A, B] means both A and B
 '''
 
+k_B = 1.380649*10^-23 # J/Klevin
 au_in_meters = 1.4959787 * 10**11
 radius_Earth_in_meters = 6.378137 * 10**6
 radius_Jupiter_in_meters = 6.9911 * 10**7
