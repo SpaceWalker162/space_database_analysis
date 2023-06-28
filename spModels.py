@@ -202,10 +202,16 @@ class bowShockAndMagnetopausePositionModels:
             wlPath: the path to wolframkernel, for example, '/usr/local/Wolfram/Mathematica/12.0/Executables/WolframKernel'
             modelName: Joy02BS, Joy02MP (doi:10.1029/2001JA009146)
         '''
+        modelDict = {'Joy02BS': {'modelType': 'secondOrderSurface'},
+                     'Joy02MP': {'modelType': 'secondOrderSurface'},
+                     'Went11': {'modelType': 'conicSection'},
+                     }
+        self.modelDict = modelDict
         if wlPath is not None:
             self.wlSession = WolframLanguageSession(wlPath)
             self.modelParas = modelParas
-        if self.modelName in ['Joy02BS', 'Joy02MP']:
+        if self.modelName in ['Joy02BS', 'Joy02MP', 'Went11', 'Kanani10']:
+            self.modelType = self.modelDict[self.modelName]['modelType']
             self.initMathematicaModel()
 
     def initMathematicaModel(self):
@@ -213,12 +219,16 @@ class bowShockAndMagnetopausePositionModels:
             initJoy02Model(self.wlSession, model='BS', **self.modelParas)
         elif self.modelName == 'Joy02MP':
             initJoy02Model(self.wlSession, model='MP', **self.modelParas)
+        elif self.modelName == 'Went11':
+            initWent11Model(self.wlSession, **self.modelParas)
+        elif self.modelName == 'Kanani10':
+            initKanani10Model(self.wlSession, **self.modelParas)
 
 #    def calculatePosition(self, pos, toCal='r', returnR=True, returnXYZ=False):
     def calculatePosition(self, pos, toCal='r'):
         '''
         Parameters:
-            pos: position, an array of [..., 2]. The last dimension is defined by posPara
+            pos: position, an array of [..., n]. The last dimension is represent the known parameters for a point.
             toCal: if 'r', then the last dimension of pos represents theta and phi. If 'z', then the last dimension of pos are x and y.
             posPara: a list of two elements. If ['theta', 'phi'], then the last dimension of pos are these components. Other possibility include but not limited to ['x', 'y'], ['r', 'theta']. Make sure the parameter follow the order r>theta>phi, x>y>z
         Return:
@@ -228,39 +238,36 @@ class bowShockAndMagnetopausePositionModels:
         pos_ = pos.reshape((-1, shape[-1]))
         numberOfPoints = len(pos_)
         posLastEles = np.zeros(numberOfPoints)
-        for ind in range(numberOfPoints):
-            if toCal == 'r':
-                theta = pos_[ind, 0]
-                phi = pos_[ind, 1]
-                wlCMD = '''rInThetaPhiAtOriginXYZ0/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
-                '''.format(theta=theta, phi=phi)
-                posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
-                assert not np.all(posLastEle_ > 0)
-                posLastEle_ = np.max(posLastEle_)
-                assert posLastEle_ > 0
-                posLastEles[ind] = posLastEle_
-            elif toCal == 'z':
-                x = pos_[ind, 0]
-                y = pos_[ind, 1]
-                wlCMD = '''zInXY/.{{x -> {x}, y -> {y}}}
-                '''.format(x=x, y=y)
-                posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+        if self.modelType == 'secondOrderSurface':
+            for ind in range(numberOfPoints):
+                if toCal == 'r':
+                    theta = pos_[ind, 0]
+                    phi = pos_[ind, 1]
+                    wlCMD = '''rInThetaPhiAtOriginXYZ0/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
+                    '''.format(theta=theta, phi=phi)
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+                    assert not np.all(posLastEle_ > 0)
+                    posLastEle_ = np.max(posLastEle_)
+                    assert posLastEle_ > 0
+                    posLastEles[ind] = posLastEle_
+                elif toCal == 'z':
+                    x = pos_[ind, 0]
+                    y = pos_[ind, 1]
+                    wlCMD = '''zInXY/.{{x -> {x}, y -> {y}}}
+                    '''.format(x=x, y=y)
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+        elif self.modelType == 'conicSection':
+            for ind in range(numberOfPoints):
+                if toCal == 'r':
+                    theta = pos_[ind, 0]
+                    wlCMD = '''rInTheta/.{{theta -> {theta}}}
+                    '''.format(theta=theta)
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
+                    posLastEles[ind] = posLastEle_
+                else:
+                    raise Exception('unknown toCal')
         posLastEles = posLastEles.reshape(shape[:-1])
         return posLastEles
-#        returnedVariables = []
-#        if returnR:
-#            r = posLastEles
-#            returnedVariables.append(r)
-#        if returnXYZ:
-#            r = posLastEles
-#            theta = pos[:, 0]
-#            phi = pos[:, 1]
-#            x = r * np.sin(theta) * np.cos(phi)
-#            y = r * np.sin(theta) * np.sin(phi)
-#            z = r * np.cos(theta)
-#            posXYZ = np.concatenate([x[:, None], y[:, None], z[:, None]], axis=1)
-#            returnedVariables.append(posXYZ)
-#        return returnedVariables
 
 
 def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(3)):
@@ -287,6 +294,45 @@ def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(
         d = -0.014 + 0.096*dynamicPressure
         e = -0.814 - 0.811*dynamicPressure
         f = -0.050 + 0.168*dynamicPressure
+    initModelCMD = '''eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
+   y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+        rInThetaPhi = r /. Solve[eq == 0, r];
+        eqXYZ = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2;
+        eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
+        eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
+   y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+        rInThetaPhiAtOriginXYZ0 = r /. Solve[eqRTPAtOriginXYZ0 == 0, r];
+        zInXY = z /. Solve[eqXYZ == 0, z]
+             '''.format(a=a, b=b, c=c, d=d, e=e, f=f, x0=x0, y0=y0, z0=z0)
+    wlSession.evaluate(initModelCMD)
+
+
+def initWent11Model(wlSession, dynamicPressure=None):
+    '''
+    Purpose: obtain the location of Kronian bow shock using the model doi:10.1029/2010JA016349
+    Parameters:
+        wlSession: a wolframe session
+        dynamicPressure: upstream solar wind dynamic pressure
+        origin: the origin of the coordinate system in the unit of R_J
+    '''
+    c1 = 14.7
+    c2 = 5.4
+    epsilon = 0.84
+    c1PDYNc2 = c1 * dynamicPressure**(-1/c2)
+    initModelCMD = '''rInTheta = (1 + {epsilon}) {c1PDYNc2} / (1 + {epsilon} Cos[theta])
+             '''.format(c1PDYNc2=c1PDYNc2, epsilon=epsilon)
+    wlSession.evaluate(initModelCMD)
+
+
+def initKanani10Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
+    '''
+    Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2009JA014262
+    Parameters:
+        wlSession: a wolframe session
+        dynamicPressure: upstream solar wind dynamic pressure
+        origin: the origin of the coordinate system in the unit of R_J
+    '''
+    x0, y0, z0 = origin / 120
     initModelCMD = '''eq = {a} + {b} x + {c} x^2 + {d} y + {e} y^2 + {f} x y - z^2 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], 
    y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
         rInThetaPhi = r /. Solve[eq == 0, r];

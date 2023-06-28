@@ -798,7 +798,7 @@ def vectorRThetaPhi2VectorCartesian(pos, vector):
     rtp2xyzMat[..., 2, 0] = -y/r
     rtp2xyzMat[..., 2, 1] = x/r
     rtp2xyzMat = normalized(rtp2xyzMat)
-    vectorCartesian = cartesian1ToCartesian2(vecInC1=vector, c2BasisInC1Basis=rtp2xyzMat)
+    vectorCartesian = cartesian1ToCartesian2(vecInC1=vector, c1BasisInC2Basis=rtp2xyzMat)
     return vectorCartesian
 
 
