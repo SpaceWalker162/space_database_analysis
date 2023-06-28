@@ -503,15 +503,15 @@ def readCDFInfo(cdfFile):
         cdfFile: a cdf file object defined by cdflib
     '''
     info = cdfFile.cdf_info()
-    variables = info['zVariables']
+    variables = info.zVariables
     if len(variables) == 0:
-        variables = info['rVariables']
+        variables = info.rVariables
     varInfo = []
     varInfoDict = {}
     for i, var in enumerate(variables):
         varInfoDict[var] = {}
-        varInfoDict[var].update(cdfFile.varinq(variable=var))
-        varInfoDict[var].update(cdfFile.varattsget(variable=var))
+        varInfoDict[var]['varInfo'] = cdfFile.varinq(variable=var)
+        varInfoDict[var]['varAtts'] = cdfFile.varattsget(variable=var)
         varInfo.append(varInfoDict[var])
     return varInfo, varInfoDict
 
