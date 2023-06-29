@@ -204,6 +204,7 @@ class bowShockAndMagnetopausePositionModels:
         '''
         modelDict = {'Joy02BS': {'modelType': 'secondOrderSurface'},
                      'Joy02MP': {'modelType': 'secondOrderSurface'},
+                     'GruesBeck18MarsBS': {'modelType': 'secondOrderSurface'},
                      'Went11': {'modelType': 'conicSection'},
                      'Kanani10': {'modelType': 'conicSection'},
                      }
@@ -211,9 +212,9 @@ class bowShockAndMagnetopausePositionModels:
         if wlPath is not None:
             self.wlSession = WolframLanguageSession(wlPath)
             self.modelParas = modelParas
-        if self.modelName in ['Joy02BS', 'Joy02MP', 'Went11', 'Kanani10']:
-            self.modelType = self.modelDict[self.modelName]['modelType']
-            self.initMathematicaModel()
+#        if self.modelName in ['Joy02BS', 'Joy02MP', 'Went11', 'Kanani10']:
+        self.modelType = self.modelDict[self.modelName]['modelType']
+        self.initMathematicaModel()
 
     def initMathematicaModel(self):
         if self.modelName == 'Joy02BS':
@@ -224,6 +225,8 @@ class bowShockAndMagnetopausePositionModels:
             initWent11Model(self.wlSession, **self.modelParas)
         elif self.modelName == 'Kanani10':
             initKanani10Model(self.wlSession, **self.modelParas)
+        elif self.modelName == 'GruesBeck18MarsBS':
+            initGruesBeck18MarsBSModel(self.wlSession)
 
 #    def calculatePosition(self, pos, toCal='r', returnR=True, returnXYZ=False):
     def calculatePosition(self, pos, toCal='r'):
@@ -249,19 +252,27 @@ class bowShockAndMagnetopausePositionModels:
                 if toCal == 'r':
                     theta = pos_[ind, 0]
                     phi = pos_[ind, 1]
-                    wlCMD = '''rInThetaPhiAtOriginXYZ0/.{{\[Theta] -> {theta}, \[Phi] -> {phi}}}
+                    wlCMD = '''r /. NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
                     '''.format(theta=theta, phi=phi)
-                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
-                    assert not np.all(posLastEle_ > 0)
+#                    wlCMD = '''NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
+#                    '''.format(theta=pos[1, 0], phi=pos[1, 1])
+#                    wlCMD = '''NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r]
+#                    '''.format(theta=pos[1, 0], phi=pos[1, 1])
+#martianBS.wlSession.evaluate(wlCMD)
+#                    wlCMD = '''NSolve[(eqXYZ == 0)/.{{x->0, y->0}}, z]
+#                    '''
+#martianBS.wlSession.evaluate(wlCMD)
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD)).squeeze()
+                    posLastEle_ = np.where(posLastEle_ < 10**10, posLastEle_, np.zeros_like(posLastEle_))
+                    assert np.count_nonzero(posLastEle_ > 0) == 1 
                     posLastEle_ = np.max(posLastEle_)
-                    assert posLastEle_ > 0
                     posLastEles[ind] = posLastEle_
                 elif toCal == 'z':
                     x = pos_[ind, 0]
                     y = pos_[ind, 1]
                     wlCMD = '''zInXY/.{{x -> {x}, y -> {y}}}
                     '''.format(x=x, y=y)
-                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))*120 # unit R_J
+                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
         elif self.modelType == 'conicSection':
             for ind in range(numberOfPoints):
                 if toCal == 'r':
@@ -359,3 +370,36 @@ def initKanani10Model(wlSession, dynamicPressure=None):
                       eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
              '''.format(r0=r0, K=K)
     wlSession.evaluate(initModelCMD)
+
+def initGruesBeck18MarsBSModel(wlSession, origin=np.zeros(3)):
+    '''
+    Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2018JA025366. The coordinate system is MSO system.
+    Parameters:
+        wlSession: a wolframe session
+        origin: the origin of the coordinate system in the unit of R_J
+    '''
+    x0, y0, z0 = origin
+    Ap = 0.049
+    Bp = 0.157
+    Cp = 0.153
+    Dp = 0.026
+    Ep = 0.012
+    Fp = 0.051
+    Gp = 0.566
+    Hp = -0.031
+    Ip = 0.019
+    initModelCMD = '''eqXYZ = {Ap} x^2 + {Bp} y^2 + {Cp} z^2 + {Dp} x y +{Ep} y z + {Fp} x z + {Gp} x + {Hp} y + {Ip} z - 1;
+                      eqRTP = eqXYZ /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+                      rInThetaPhi = r /. Solve[eqRTP == 0, r];
+                      eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
+                      eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+                      rInThetaPhiAtOriginXYZ0 = r /. Solve[eqRTPAtOriginXYZ0 == 0, r];
+                      zInXY = z /. Solve[eqXYZ == 0, z]
+             '''.format(Ap=Ap, Bp=Bp, Cp=Cp, Dp=Dp, Ep=Ep, Fp=Fp, Gp=Gp, Hp=Hp, Ip=Ip, x0=x0, y0=y0, z0=z0)
+    wlSession.evaluate(initModelCMD)
+
+#    stringList = []
+#    for i in range(9):
+#        stringList.append('{a}p={a}p'.format(a=chr(ord('A') + i)))
+#    string = ', '.join(stringList)
+#    print(string)
