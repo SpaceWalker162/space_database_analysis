@@ -506,8 +506,11 @@ hourMinFormatterTT2000 = FuncFormatter(format_hourMinTT2000)
 
 ## plot time format >>>>
 
-def datetime2epoch(dateTime):
-    return cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime))
+def datetime2epoch(dateTime, epochType='CDF_EPOCH'):
+    if epochType == 'CDF_EPOCH':
+        return cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime))
+    else:
+        raise Exception("datetime object resolution to microsecond")
 
 def epoch2datetime(epoch):
     return datetime(*cdflib.cdfepoch.breakdown(epoch)[:6])

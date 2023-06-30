@@ -33,7 +33,7 @@ import dataAnalysisTools as dat
 '''
 
 
-multispacecraftMissions = ['cluster', 'mms']
+multispacecraftMissions = ['cluster', 'mms', 'themis']
 piledInstrumentation = ['5VPS', 'CIS']
 instrumentationFileUnderYear = [('cluster', '5VPS'), ('cluster', 'CIS'), ('ace', 'swepam'), ('ace', 'mag')]
 instrumentationFileUnderMonth = None 
@@ -45,9 +45,12 @@ missionInfo = {
         'cluster': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': True},
+        'themis': {
+            'epochType': 'CDF_EPOCH',
+            'multispacecraftMission': True},
         'ace': {
             'epochType': 'CDF_EPOCH',
-            'multispacecraftMission': False}
+            'multispacecraftMission': False},
         }
 
 
