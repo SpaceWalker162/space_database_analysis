@@ -562,7 +562,7 @@ class Epochs:
             if isinstance(epochs, list):
                 epochs = np.array(epochs)
             self.epochs = epochs
-            self.dateTime = map_multi_dimensional_list(epoch2datetime, epochs.tolist())
+            self.dateTimeList = map_multi_dimensional_list(epoch2datetime, epochs.tolist())
 
     def epochRecords(self, ts, tolerance=1):
         '''
