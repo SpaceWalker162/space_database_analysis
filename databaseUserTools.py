@@ -311,6 +311,7 @@ class Spacecraft:
     def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
         '''
         Parameters:
+            datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
             instrumentation: a list in terms of the directory names at all levels below spacecraft and above year or files. For example, ['fgm', 'brst', 'l2']
             datasetAndVariables: this parameter should not be used by user. 
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
@@ -801,31 +802,36 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
 ##
 def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType='CDF_EPOCH'):
     varInfo, varInfoDict = readCDFInfo(cdfFile)
-    epochDataInd = 0
+    epochDataInd = 0 # in most cases, epoch is the first zVariable
     dataMajor = {}
     dataAux = {} # data not dependant on epoch
-    if epochType == 'CDF_EPOCH':
-        epochRange = [cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-    elif epochType == 'CDF_EPOCH16':
-        epochRange = [cdflib.cdfepoch.compute_epoch16(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-    elif epochType == 'CDF_TIME_TT2000':
-        epochRange = [cdflib.cdfepoch.compute_tt2000(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-    recordRange = cdfFile.epochrange(epochDataInd, *epochRange)
-    logging.info('record range:')
-    logging.info(recordRange)
+    timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
+#    if epochType == 'CDF_EPOCH':
+#        epochRange = [cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
+#        recordRange = cdfFile.epochrange_epoch(epochDataInd, *epochRange)
+#    elif epochType == 'CDF_EPOCH16':
+#        epochRange = [cdflib.cdfepoch.compute_epoch16(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
+#        recordRange = cdfFile.epochrange_epoch16(epochDataInd, *epochRange)
+#    elif epochType == 'CDF_TIME_TT2000':
+#        epochRange = [cdflib.cdfepoch.compute_tt2000(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
+#        recordRange = cdfFile.epochrange_tt2000(epochDataInd, *epochRange)
+#    recordRange = cdfFile.epochrange_epoch(epochDataInd, *epochRange)
+#    logging.info('record range:')
+#    logging.info(recordRange)
     for var in variables:
         majorData = True
         depend0 = varInfoDict[var].get('DEPEND_0', None)
         if depend0 is None:
-            if varInfo[epochDataInd]['Variable'] == var:
+            if varInfo[epochDataInd]['varInfo'].Variable == var:
                 pass
             else:
                 majorData = False
         else:
-            assert depend0 == varInfo[epochDataInd]['Variable']
+            assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
         if majorData:
-            if recordRange is not None:
-                dataMajor[var] = cdfFile.varget(var, startrec=recordRange[0], endrec=recordRange[1])
+            if timeRange is not None:
+#                dataMajor[var] = cdfFile.varget(var, startrec=recordRange[0], endrec=recordRange[1])
+                dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
             else:
                 dataMajor[var] = np.array([])
         else:
