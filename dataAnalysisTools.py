@@ -911,7 +911,7 @@ def normalizeAngle(angle):
     '''
     purpose: to make angle within [0,2pi)
     '''
-    return angle - np.floor(2*np.pi*angle / (2*np.pi))
+    return np.mod(angle, np.pi*2)
 
 def cartesian2polar(vectors):
     r = np.linalg.norm(vectors, axis=-1)
@@ -970,6 +970,15 @@ def cartesian1ToCartesian2(vecInC1, c1BasisInC2Basis=None, c2BasisInC1Basis=None
         vecInC2 = np.sum(vecInC1[..., None] * np.linalg.inv(c2BasisInC1Basis), axis=-2)
     return vecInC2
 
+def c1BasisInC2Basis(c1BasisInC3Basis, c2BasisInC3Basis):
+    '''
+    Purpose: as indicated by the function name and the parameter names. 
+    Parameter:
+        c1BasisInC3Basis: an array [..., 3, 3]
+        c2BasisInC3Basis: an array [..., 3, 3]
+    '''
+    c3BasisInC2Basis = np.linalg.inv(c2BasisInC3Basis)
+    return c1BasisInC3Basis @ c3BasisInC2Basis
 
 def angleBetweenVectors(v1, v2):
     '''
@@ -1350,3 +1359,67 @@ def interp(x, xp, fp):
     for ind in range(data.shape[-1]):
         data_interpolated[:, ind] = np.interp(x, xp, data[:, ind])
     return data_interpolated
+
+def rtnBasisInJSOBasisFromHorizonsData(t, **posDataDict):
+    '''
+    Parameters:
+        posDataDict: e.g. = {
+                'tJupiter': tJupiter,
+                'vJupiter': vJupiter,
+                'posCartesianJupiter': posCartesianJupiter,
+                'tSun': tSun,
+                'vSun': vSun,
+                'posCartesianSun': posCartesianSun,
+                'tVoyager': tVoyager,
+                'posCartesianVoyager': posCartesianVoyager,
+                       }
+    '''
+    solarEquatorInICRFEcliptic = np.array([7.25, 75.76])/180*np.pi
+    solarPoleInICRFEclipticSpherical = np.array([solarEquatorInICRFEcliptic[0], np.mod(solarEquatorInICRFEcliptic[1]-np.pi/2, np.pi*2)])
+    solarPoleInICRFEclipticCartesian = spherical2cartesian(solarPoleInICRFEclipticSpherical)
+    vJupiter = interp(t, posDataDict['tJupiter'], posDataDict['vJupiter'])
+    vSun = interp(t, posDataDict['tSun'], posDataDict['vSun'])
+    posCartesianVoyager = interp(t, posDataDict['tVoyager'], posDataDict['posCartesianVoyager'])
+    posCartesianJupiter = interp(t, posDataDict['tJupiter'], posDataDict['posCartesianJupiter'])
+    posCartesianSun = interp(t, posDataDict['tSun'], posDataDict['posCartesianSun'])
+    vJupiterOrbital = vJupiter - vSun
+    vJupiterOrbitalNormalized = normalized(vJupiterOrbital)
+    x_axis = normalized(posCartesianSun-posCartesianJupiter)
+    z_axis = np.cross(vJupiterOrbitalNormalized, x_axis)
+    y_axis = np.cross(z_axis, x_axis)
+    jsoBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
+    r_axis_rtn = normalized(posCartesianVoyager - posCartesianSun)
+    n_axis_rtn = normalized(np.cross(solarPoleInICRFEclipticCartesian, r_axis_rtn))
+    t_axis_rtn = normalized(np.cross(r_axis_rtn, n_axis_rtn))
+    rtnBasisInICRFBasis = np.concatenate([r_axis_rtn[..., None, :], n_axis_rtn[..., None, :], t_axis_rtn[..., None, :]], axis=-2)
+    rtnBasisInJSOBasis = c1BasisInC2Basis(rtnBasisInICRFBasis, jsoBasisInICRFBasis)
+    return rtnBasisInJSOBasis
+#
+def jsoBasisInICRFBasisFromHorizonsData(t, **posDataDict):
+    '''
+    Parameters:
+        posDataDict: e.g. = {
+                'tJupiter': tJupiter,
+                'vJupiter': vJupiter,
+                'posCartesianJupiter': posCartesianJupiter,
+                'tSun': tSun,
+                'vSun': vSun,
+                'posCartesianSun': posCartesianSun,
+                'tVoyager': tVoyager,
+                'posCartesianVoyager': posCartesianVoyager,
+                       }
+    '''
+    vJupiter = interp(t, posDataDict['tJupiter'], posDataDict['vJupiter'])
+    vSun = interp(t, posDataDict['tSun'], posDataDict['vSun'])
+    posCartesianVoyager = interp(t, posDataDict['tVoyager'], posDataDict['posCartesianVoyager'])
+    posCartesianJupiter = interp(t, posDataDict['tJupiter'], posDataDict['posCartesianJupiter'])
+    posCartesianSun = interp(t, posDataDict['tSun'], posDataDict['posCartesianSun'])
+    vJupiterOrbital = vJupiter - vSun
+    vJupiterOrbitalNormalized = normalized(vJupiterOrbital)
+    jupiterToVoyager = (posCartesianVoyager - posCartesianJupiter)*1000/(radius_Jupiter_in_meters)
+    x_axis = normalized(posCartesianSun-posCartesianJupiter)
+    z_axis = np.cross(vJupiterOrbitalNormalized, x_axis)
+    y_axis = np.cross(z_axis, x_axis)
+    jsoBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
+    posVoyagerInJSO = cartesian1ToCartesian2(jupiterToVoyager, c2BasisInC1Basis=jsoBasisInICRFBasis)
+    return posVoyagerInJSO
