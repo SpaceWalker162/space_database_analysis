@@ -819,8 +819,10 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
 #    logging.info('record range:')
 #    logging.info(recordRange)
     for var in variables:
+        print('var: ', var)
         majorData = True
-        depend0 = varInfoDict[var].get('DEPEND_0', None)
+        depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
+        print('depend0 ', depend0)
         if depend0 is None:
             if varInfo[epochDataInd]['varInfo'].Variable == var:
                 pass
