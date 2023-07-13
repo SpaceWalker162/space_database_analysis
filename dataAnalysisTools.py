@@ -25,6 +25,8 @@ radius_Earth_in_meters = 6.378137 * 10**6
 radius_Jupiter_in_meters = 6.9911 * 10**7
 radius_Saturn_in_meters = 5.8232 * 10**7
 radius_Mars_in_meters = 3.3895 * 10**6
+solarNorthPoleOfRotationInICRFEquatorial = np.array([63.87, 286.13])/180*np.pi # latitude and longitude
+saturnianNorthPoleOfRotationInICRFEquatorial = np.array([83.54, 40.58])/180*np.pi
 
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -1389,9 +1391,9 @@ def rtnBasisInJSOBasisFromHorizonsData(t, **posDataDict):
     y_axis = np.cross(z_axis, x_axis)
     jsoBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     r_axis_rtn = normalized(posCartesianVoyager - posCartesianSun)
-    n_axis_rtn = normalized(np.cross(solarPoleInICRFEclipticCartesian, r_axis_rtn))
-    t_axis_rtn = normalized(np.cross(r_axis_rtn, n_axis_rtn))
-    rtnBasisInICRFBasis = np.concatenate([r_axis_rtn[..., None, :], n_axis_rtn[..., None, :], t_axis_rtn[..., None, :]], axis=-2)
+    t_axis_rtn = normalized(np.cross(solarPoleInICRFEclipticCartesian, r_axis_rtn))
+    n_axis_rtn = normalized(np.cross(r_axis_rtn, t_axis_rtn))
+    rtnBasisInICRFBasis = np.concatenate([r_axis_rtn[..., None, :], t_axis_rtn[..., None, :], n_axis_rtn[..., None, :]], axis=-2)
     rtnBasisInJSOBasis = c1BasisInC2Basis(rtnBasisInICRFBasis, jsoBasisInICRFBasis)
     return rtnBasisInJSOBasis
 #
@@ -1423,3 +1425,37 @@ def jsoBasisInICRFBasisFromHorizonsData(t, **posDataDict):
     jsoBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     posVoyagerInJSO = cartesian1ToCartesian2(jupiterToVoyager, c2BasisInC1Basis=jsoBasisInICRFBasis)
     return posVoyagerInJSO
+
+def ksmBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
+    '''
+    see doi: 10.1029/2010JA016349 for KSM definition
+    '''
+    posCartesianSaturn = interp(t, tSaturn, posCartesianSaturn)
+    posCartesianSun = interp(t, tSun, posCartesianSun)
+    magneticAxisSpherical = np.array([np.pi/2, 0]) + np.array([-1, 1])*saturnianNorthPoleOfRotationInICRFEquatorial
+    magneticAxisCartesian = spherical2cartesian(magneticAxisSpherical)
+    shapeOfPoints = posCartesianSun.shape
+    magneticAxisCartesian = np.repeat(magneticAxisCartesian[None, :], np.prod(shapeOfPoints[:-1]), axis=0).reshape(shapeOfPoints)
+    planetToSun = posCartesianSun-posCartesianSaturn
+    x_axis = normalized(planetToSun, axis=-1)
+    y_axis = normalized(np.cross(magneticAxisCartesian, x_axis))
+    z_axis = normalized(np.cross(x_axis, y_axis))
+    ksmBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
+    return ksmBasisInICRFBasis
+
+def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
+    '''
+    see doi: 10.1002/2018JA025214 for SSQ definition
+    '''
+    posCartesianSaturn = interp(t, tSaturn, posCartesianSaturn)
+    posCartesianSun = interp(t, tSun, posCartesianSun)
+    magneticAxisSpherical = np.array([np.pi/2, 0]) + np.array([-1, 1])*saturnianNorthPoleOfRotationInICRFEquatorial
+    magneticAxisCartesian = spherical2cartesian(magneticAxisSpherical)
+    shapeOfPoints = posCartesianSun.shape
+    magneticAxisCartesian = np.repeat(magneticAxisCartesian[None, :], np.prod(shapeOfPoints[:-1]), axis=0).reshape(shapeOfPoints)
+    planetToSun = posCartesianSun-posCartesianSaturn
+    z_axis = normalized(magneticAxisCartesian)
+    y_axis = normalized(np.cross(magneticAxisCartesian, normalized(planetToSun)))
+    x_axis = normalized(np.cross(y_axis, z_axis))
+    ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
+    return ssqBasisInICRFBasis

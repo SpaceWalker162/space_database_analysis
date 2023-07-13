@@ -6,7 +6,9 @@ from datetime import datetime
 from datetime import timedelta
 import os
 import sys
+import logging
 from wolframclient.language import wl
+import wolframclient
 from wolframclient.evaluation import WolframLanguageSession
 import dataAnalysisTools as dat
 
@@ -252,20 +254,7 @@ class bowShockAndMagnetopausePositionModels:
                 if toCal == 'r':
                     theta = pos_[ind, 0]
                     phi = pos_[ind, 1]
-                    wlCMD = '''r /. NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
-                    '''.format(theta=theta, phi=phi)
-#                    wlCMD = '''NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
-#                    '''.format(theta=pos[1, 0], phi=pos[1, 1])
-#                    wlCMD = '''NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r]
-#                    '''.format(theta=pos[1, 0], phi=pos[1, 1])
-#martianBS.wlSession.evaluate(wlCMD)
-#                    wlCMD = '''NSolve[(eqXYZ == 0)/.{{x->0, y->0}}, z]
-#                    '''
-#martianBS.wlSession.evaluate(wlCMD)
-                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD)).squeeze()
-                    posLastEle_ = np.where(posLastEle_ < 10**10, posLastEle_, np.zeros_like(posLastEle_))
-                    assert np.count_nonzero(posLastEle_ > 0) == 1 
-                    posLastEle_ = np.max(posLastEle_)
+                    posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi)
                     posLastEles[ind] = posLastEle_
                 elif toCal == 'z':
                     x = pos_[ind, 0]
@@ -276,10 +265,15 @@ class bowShockAndMagnetopausePositionModels:
         elif self.modelType == 'conicSection':
             for ind in range(numberOfPoints):
                 if toCal == 'r':
-                    theta = pos_[ind, 0]
-                    wlCMD = '''rInTheta/.{{theta -> {theta}}}
-                    '''.format(theta=theta)
-                    posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
+                    if shape[-1] == 1:
+                        theta = pos_[ind, 0]
+                        wlCMD = '''rInTheta/.{{theta -> {theta}}}
+                        '''.format(theta=theta)
+                        posLastEle_ = np.array(self.wlSession.evaluate(wlCMD))
+                    elif shape[-1] == 2:
+                        theta = pos_[ind, 0]
+                        phi = pos_[ind, 1]
+                        posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi)
                     posLastEles[ind] = posLastEle_
                 elif toCal == 'z':
                     x = pos_[ind, 0]
@@ -292,6 +286,25 @@ class bowShockAndMagnetopausePositionModels:
                     raise Exception('unknown toCal')
         posLastEles = posLastEles.reshape(shape[:-1])
         return posLastEles
+
+    def calculateRFromThetaPhi(self, theta, phi):
+        logging.info('theta: {}'.format(theta))
+        logging.info('phi: {}'.format(phi))
+        wlCMD = '''r /. NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
+        '''.format(theta=theta, phi=phi)
+        wlResult = self.wlSession.evaluate(wlCMD)
+        if isinstance(wlResult, wolframclient.language.expression.WLSymbol):
+            logging.warning('not found posLastEle_, but found:')
+            logging.warning(wlResult)
+            posLastEle_ = None
+        else:
+            posLastEle_ = np.array(wlResult).squeeze()
+            logging.info('posLastEle_')
+            logging.info(posLastEle_)
+            posLastEle_ = np.where(posLastEle_ < 10**10, posLastEle_, np.zeros_like(posLastEle_))
+            assert np.count_nonzero(posLastEle_ > 0) == 1 
+            posLastEle_ = np.max(posLastEle_)
+        return posLastEle_
 
 
 def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(3)):
@@ -331,7 +344,7 @@ def initJoy02Model(wlSession, model=None, dynamicPressure=None, origin=np.zeros(
     wlSession.evaluate(initModelCMD)
 
 
-def initWent11Model(wlSession, dynamicPressure=None):
+def initWent11Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
     '''
     Purpose: obtain the location of Kronian bow shock using the model doi:10.1029/2010JA016349. The coordinate system is the aberrated KSM system.
     Parameters:
@@ -339,6 +352,7 @@ def initWent11Model(wlSession, dynamicPressure=None):
         dynamicPressure: upstream solar wind dynamic pressure
         origin: the origin of the coordinate system in the unit of R_J
     '''
+    x0, y0, z0 = origin
     c1 = 14.7
     c2 = 5.4
     epsilon = 0.84
@@ -346,12 +360,13 @@ def initWent11Model(wlSession, dynamicPressure=None):
     initModelCMD = '''rInTheta = (1 + {epsilon}) {c1Pc2} / (1 + {epsilon} Cos[theta]);
                       eqRT = r - (1 + {epsilon}) {c1Pc2} / (1 + {epsilon} Cos[theta]);
                       eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
-                      zInXY = \[Sqrt]({c1Pc2}^2 + 2 {c1Pc2}^2 {epsilon}+ {c1Pc2}^2 {epsilon}^2 - 2 {c1Pc2} {epsilon} x - 2 {c1Pc2} {epsilon}^2 x - x^2 + {epsilon}^2 x^2 - y^2);
-             '''.format(c1Pc2=c1Pc2, epsilon=epsilon)
+                      eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
+                      eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+             '''.format(c1Pc2=c1Pc2, epsilon=epsilon, x0=x0, y0=y0, z0=z0)
     wlSession.evaluate(initModelCMD)
 
 
-def initKanani10Model(wlSession, dynamicPressure=None):
+def initKanani10Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
     '''
     Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2009JA014262. The coordinate system is KSM system.
     Parameters:
@@ -359,6 +374,7 @@ def initKanani10Model(wlSession, dynamicPressure=None):
         dynamicPressure: upstream solar wind dynamic pressure
         origin: the origin of the coordinate system in the unit of R_J
     '''
+    x0, y0, z0 = origin
     a1 = 10.3
     a2 = 0.2
     a3 = 0.73
@@ -368,7 +384,9 @@ def initKanani10Model(wlSession, dynamicPressure=None):
     initModelCMD = '''rInTheta = {r0} (2 / (1 + Cos[theta]))^{K};
                       eqRT = r - {r0} (2 / (1 + Cos[theta]))^{K};
                       eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
-             '''.format(r0=r0, K=K)
+                      eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
+                      eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+             '''.format(r0=r0, K=K, x0=x0, y0=y0, z0=z0)
     wlSession.evaluate(initModelCMD)
 
 def initGruesBeck18MarsBSModel(wlSession, origin=np.zeros(3)):
