@@ -1,6 +1,7 @@
 __author__ = 'Yufei Zhou'
 
 import numpy as np
+import pandas as pd
 #import constants as con
 import cdflib    # see github.com/MAVENSDC/cdflib
 #import tarfile
@@ -842,7 +843,14 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
 
 
 def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', sep=None):
+    '''
+    Purpose: read data file from PDS (https://pds-ppi.igpp.ucla.edu/)
+    Parameters:
+        fileName: path to file without extension of the file.
+    '''
     infoFile = fileName + infoFileExtension
+    columnNames = []
+    dataDict = {}
     if infoFileExtension == '.xml':
         xmlTree = ET.parse(infoFile)
         root = xmlTree.getroot()
@@ -853,8 +861,6 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
                         for l3 in l2:
                             if 'Record_Character' in l3.tag:
                                 record_character = l3
-        dataDict = {}
-        columnNames = []
         for child in record_character:
             if 'Field_Character' in child.tag:
                 for field in child:
@@ -870,32 +876,93 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
                     tagName = field.tag.split('}')[-1]
                     dataDict[columnName][tagName] = field.text
     elif infoFileExtension == '.LBL':
-        pass
+        with open(infoFile, 'r') as f:
+            info = f.readlines()
+        objectDict = {'objectCounts': 0}
+        objectDict_ = objectDict
+        for lineInd, line in enumerate(info):
+            if '=' in line:
+                field_, value_ = line.split('=')
+                field, value = field_.strip().strip('"'), value_.strip().strip('"')
+                if field == "END_OBJECT":
+                    assert value == objectDict_['objType']
+                    objectDict_ = objectDict_['upperDict']
+                elif field == "OBJECT":
+                    newObj = {'objType': value,
+                              'upperDict': objectDict_,
+                              'objectCounts': 0}
+                    objectCounts = objectDict_['objectCounts']
+                    objectDict_['objectCounts'] += 1
+                    objectDict_[str(objectCounts)] = newObj
+                    objectDict_ = newObj
+                else:
+                    objectDict_[field.lower()] = value
+#        dataFileName = objectDict['^TABLE']
+        fmtFileName = objectDict['0'].get("^structure")
+        if fmtFileName:
+            fmtFileName = fmtFileName.strip('"')
+            pass
+        else:
+            columnsDict = objectDict['0']
+            columnCounts = columnsDict['objectCounts']
+            for columnInd in range(columnCounts):
+                columnDict = columnsDict[str(columnInd)]
+                columnName = columnDict['name']
+                columnNames.append(columnName)
+                toDelKeys = ['objType', 'upperDict', 'objectCounts']
+                for key in toDelKeys:
+                    columnDict.pop(key, None)
+                dataDict[columnName] = columnDict
     if dataFileExtension.lower() == '.tab':
         dataFile = fileName + dataFileExtension
-    with open(dataFile, 'r') as f:
-        info = f.readlines()
-
-    for lineInd, line in enumerate(info):
-        if sep is None:
-            lineInfo = info[lineInd].strip().split()
-        else:
-            lineInfo = info[lineInd].strip().split(sep=sep)
-        for columnInd, columnInfo in enumerate(lineInfo):
-            columnName = columnNames[columnInd]
-            dataType = dataDict[columnName]['data_type']
-            if dataType == 'ASCII_Date_Time_YMD_UTC':
-                data_ = ascii_date_time_ymd_utc2epoch(columnInfo)
-            elif dataType == 'ASCII_String':
-                data_ = columnInfo
-            elif dataType in ['ASCII_Integer', 'ASCII_Real']:
-                data_ = float(columnInfo)
-            if lineInd == 0:
-                dataDict[columnName]['data'] = []
-            dataDict[columnName]['data'].append(data_)
+    data_type = {}
+    for columnInd, columnName in enumerate(columnNames):
+        dataType = dataDict[columnName]['data_type']
+        if dataType in ['ASCII_Date_Time_YMD_UTC', 'TIME']:
+            timeType = dataType
+        elif dataType == 'ASCII_String':
+            pass
+        elif dataType in ['ASCII_Integer', 'ASCII_Real']:
+            data_type[columnName] = np.float64
+    if sep is None:
+        sep = '\s+'
+    data_ = pd.read_table(dataFile, sep=sep, names=columnNames, dtype=data_type)
+    if timeType == 'ASCII_Date_Time_YMD_UTC':
+        epoch = cdflib.cdfepoch.parse(list(data_['TIME'].str[:-1]))
+    elif timeType == 'TIME':
+        epoch = cdflib.cdfepoch.parse(list(data_['TIME'] + '00'))
+    data_['TIME'] = epoch
     for key in dataDict.keys():
-        dataDict[key]['data'] = np.array(dataDict[key]['data'])
+        dataDict[key]['data'] = data_[key].to_numpy()
+
+
+#    with open(dataFile, 'r') as f:
+#        info = f.readlines()
+#    for lineInd, line in enumerate(info):
+#        print(lineInd)
+#        if sep is None:
+#            lineInfo = info[lineInd].strip().split()
+#        else:
+#            lineInfo = info[lineInd].strip().split(sep=sep)
+#        for columnInd, columnInfo in enumerate(lineInfo):
+#            columnName = columnNames[columnInd]
+#            dataType = dataDict[columnName]['data_type']
+#            if dataType == 'ASCII_Date_Time_YMD_UTC':
+#                data_ = ascii_date_time_ymd_utc2epoch(columnInfo)
+#            elif dataType == 'TIME':
+#                data_ = cdflib.cdfepoch.parse(columnInfo+'00')
+#
+#            elif dataType == 'ASCII_String':
+#                data_ = columnInfo
+#            elif dataType in ['ASCII_Integer', 'ASCII_Real']:
+#                data_ = float(columnInfo)
+#            if lineInd == 0:
+#                dataDict[columnName]['data'] = []
+#            dataDict[columnName]['data'].append(data_)
+#    for key in dataDict.keys():
+#        dataDict[key]['data'] = np.array(dataDict[key]['data'])
     return dataDict, columnNames
+
 
 def ascii_date_time_ymd_utc2epoch(datetimeStr=None):
     '''
