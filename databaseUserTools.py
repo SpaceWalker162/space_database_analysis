@@ -919,6 +919,7 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
     for columnInd, columnName in enumerate(columnNames):
         dataType = dataDict[columnName]['data_type']
         if dataType in ['ASCII_Date_Time_YMD_UTC', 'TIME']:
+            timeName = columnName
             timeType = dataType
         elif dataType == 'ASCII_String':
             pass
@@ -928,9 +929,9 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         sep = '\s+'
     data_ = pd.read_table(dataFile, sep=sep, names=columnNames, dtype=data_type)
     if timeType == 'ASCII_Date_Time_YMD_UTC':
-        epoch = cdflib.cdfepoch.parse(list(data_['TIME'].str[:-1]))
+        epoch = cdflib.cdfepoch.parse(list(data_[timeName].str[:-1]))
     elif timeType == 'TIME':
-        epoch = cdflib.cdfepoch.parse(list(data_['TIME'] + '00'))
+        epoch = cdflib.cdfepoch.parse(list(data_[timeName] + '00'))
     data_['TIME'] = epoch
     for key in dataDict.keys():
         dataDict[key]['data'] = data_[key].to_numpy()
