@@ -932,7 +932,7 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         epoch = cdflib.cdfepoch.parse(list(data_[timeName].str[:-1]))
     elif timeType == 'TIME':
         epoch = cdflib.cdfepoch.parse(list(data_[timeName] + '00'))
-    data_['TIME'] = epoch
+    data_[timeName] = epoch
     for key in dataDict.keys():
         dataDict[key]['data'] = data_[key].to_numpy()
 
