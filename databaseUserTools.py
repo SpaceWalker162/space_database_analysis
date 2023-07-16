@@ -244,7 +244,10 @@ class DataFile(Instrumentation):
             criteria.append(start.strftime("%Y%m%d"))
         elif self.mission == 'cassini':
             searchMethod = 'general'
-            criteria.append(start.strftime("%Y%m%d"))
+            if 'CO-E_SW_J_S-MAG-4-SUMM-1MINAVG-V2.0' in self.instrumentation:
+                criteria.append(start.strftime("%Y"))
+            else:
+                criteria.append(start.strftime("%Y%m%d"))
         else:
             searchMethod = 'general'
             raise Exception('mission not defined!')
@@ -316,7 +319,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+    def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -345,10 +348,13 @@ class Spacecraft:
                 self.loadData(datetimeRange=datetimeRange, instrumentationRetrivingName=instrumentationRetrivingName, variableRetrivingNames=variableRetrivingNames, datasetAndVariables=datasetAndVariables, cleanData=cleanData, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
         else:
             # major branch of loadData
-            variableRetrivingNames = variableRetrivingNames.copy()
-#            if 't' not in variableRetrivingNames:
-#                variables.insert(0, 0)
-#                variableRetrivingNames.insert(0, 't')
+            if variablesWithRetrivingNames:
+                variables = [tu[0] for tu in variablesWithRetrivingNames]
+            else:
+                variableRetrivingNames = variableRetrivingNames.copy()
+                if datasetAndVariables is not None:
+                    variables = datasetAndVariables[-1]
+                variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
             if datasetAndVariables is None:
                 if isinstance(instrumentation, str):
                     instrumentation = [instrumentation]
@@ -356,9 +362,8 @@ class Spacecraft:
                     datasetAndVariables = [self.mission, self.name, *instrumentation, variables]
                 else:
                     datasetAndVariables = [self.name, *instrumentation, variables]
-                variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
-            else:
-                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
+#            else:
+#                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
             datasetsAndVariables = [datasetAndVariables]
             data_ = readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
             logging.info(data_[0].keys())
@@ -528,7 +533,7 @@ def readCDFInfo(cdfFile):
     return varInfo, varInfoDict
 
 ##
-def findFileNames(path, strings=None, size='allSize', timeTag=None):
+def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf'):
     '''
     Purpose:
         This function is to find in the directory defined by <path> the names of files which according to 
@@ -544,13 +549,16 @@ def findFileNames(path, strings=None, size='allSize', timeTag=None):
             foundFileNames = []
             for entry in it:
                 if entry.is_file():
+                    _, fileExt = os.path.splitext(entry.name)
+                    if ext and fileExt.lower() != ext:
+                        continue
                     if size[0] == '<' and entry.stat().st_size < int(size[1:]):
                         fileNamesMeetingSize.append(entry.name)
                     elif size[0] == '>' and entry.stat().st_size > int(size[1:]):
                         fileNamesMeetingSize.append(entry.name)
                     elif size == 'allSize':
                         fileNamesMeetingSize.append(entry.name)
-            logging.debug("number of files meeting size criterion: {}".format(len(fileNamesMeetingSize)))
+            logging.debug("number of files with extension {ext} and meeting size criterion: {nf}".format(ext=ext, nf=len(fileNamesMeetingSize)))
             if strings:
                 if not isinstance(strings[0], list):
                     logging.debug("string criteria for searching:")
@@ -827,10 +835,10 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
 #    logging.info('record range:')
 #    logging.info(recordRange)
     for var in variables:
-        print('var: ', var)
+        logging.info('var: ' + var)
         majorData = True
         depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
-        print('depend0 ', depend0)
+        logging.info('depend0: '+ str(depend0))
         if depend0 is None:
             if varInfo[epochDataInd]['varInfo'].Variable == var:
                 pass
@@ -838,6 +846,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
                 majorData = False
         else:
             assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
+        logging.info('isMajorData: '+str(majorData))
         if majorData:
             if timeRange is not None:
 #                dataMajor[var] = cdfFile.varget(var, startrec=recordRange[0], endrec=recordRange[1])

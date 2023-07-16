@@ -976,7 +976,7 @@ def isComplete(fileName, start, end, dataset, dataFormat='CDF', fileType='r:gz')
         return False
             
 
-def transformPDSdataToCDF(databaseDir, dataTransDict=None, recordPath=None):
+def transformPDSdataToCDF(databaseDir, dataTransDict=None, stringCriteria=['FGM_KSM_1M'], infoFileExtension='.LBL', cdfFileNameFMT=None, recordPath=None):
     dataTransDict = copy.deepcopy(dataTransDict)
     transformedFiles = []
     if not os.path.exists(recordPath):
@@ -990,20 +990,23 @@ def transformPDSdataToCDF(databaseDir, dataTransDict=None, recordPath=None):
     try:
         years = os.listdir(databaseDir)
         for year in years:
+            try: yearNum = int(year)
+            except: yearNum = None
+            if yearNum is None:
+                continue
             yearDataDir = os.path.join(databaseDir, year)
             logging.info(yearDataDir)
             fileNames = os.listdir(yearDataDir)
             for fileName in fileNames:
                 filePath = os.path.join(yearDataDir, fileName)
                 logging.info('filePath: {}'.format(filePath))
-                instrumentation = 'FGM_KSM_1M'
-                stringCriteria = [instrumentation, 'LBL']
+                stringCriteria.append(infoFileExtension)
                 cdfDir = yearDataDir
                 if all([string in fileName for string in stringCriteria]):
                     if filePath in transformedFiles:
                         continue
                     filebaseName, ext = os.path.splitext(filePath)
-                    dataDict, _ = dut.readPDSData(fileName=filebaseName, dataFileExtension='.TAB', infoFileExtension='.LBL', sep=None)
+                    dataDict, _ = dut.readPDSData(fileName=filebaseName, dataFileExtension='.TAB', infoFileExtension=infoFileExtension, sep=None)
                     numberOfOutVariables = len(dataTransDict)
                     for vInd in range(numberOfOutVariables):
                         inDataNames = dataTransDict[str(vInd)]['inName']
@@ -1022,7 +1025,7 @@ def transformPDSdataToCDF(databaseDir, dataTransDict=None, recordPath=None):
                         dataTransDict[str(vInd)]['out_data_type'] = dataTypeTransformationDict_PDS[dataType]
 
                     currentDate = datetime(int(year), 1, 1)
-                    cdfFileName = currentDate.strftime('cassini_%Y_') + instrumentation +'.cdf'
+                    cdfFileName = currentDate.strftime(cdfFileNameFMT)
                     cdfFilePath = os.path.join(cdfDir, cdfFileName)
                     if os.path.exists(cdfFilePath):
                         os.remove(cdfFilePath)
@@ -1039,8 +1042,8 @@ def transformPDSdataToCDF(databaseDir, dataTransDict=None, recordPath=None):
                         var_spec = {'Variable': dataTransDict_['outName'],
                                 'Data_Type': varDType,
                                 'Num_Elements': 1,
-                                'Rec_Vary': False,
-                                'Dim_Sizes': varData.shape
+                                'Rec_Vary': True,
+                                'Dim_Sizes': varData.shape[1:],
                                     }
                         var_attrs = {}
                         depend0 = dataTransDict_.get('DEPEND_0', None)
