@@ -25,6 +25,7 @@ radius_Earth_in_meters = 6.378137 * 10**6
 radius_Jupiter_in_meters = 6.9911 * 10**7
 radius_Saturn_in_meters = 5.8232 * 10**7
 radius_Mars_in_meters = 3.3895 * 10**6
+radius_Mercury_in_meters = 2.4397 * 10**6
 solarNorthPoleOfRotationInICRFEquatorial = np.array([63.87, 286.13])/180*np.pi # latitude and longitude
 saturnianNorthPoleOfRotationInICRFEquatorial = np.array([83.54, 40.58])/180*np.pi
 
