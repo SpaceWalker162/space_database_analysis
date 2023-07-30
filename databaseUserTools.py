@@ -13,6 +13,7 @@ import subprocess
 from cycler import cycler
 from itertools import combinations
 import json
+import struct
 from pprint import pprint
 from scipy.signal import butter, lfilter, freqz
 from scipy.optimize import fsolve
@@ -50,6 +51,9 @@ missionInfo = {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': True},
         'ace': {
+            'epochType': 'CDF_EPOCH',
+            'multispacecraftMission': False},
+        'cassini': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
         }
@@ -238,6 +242,12 @@ class DataFile(Instrumentation):
         elif self.mission == 'ace':
             searchMethod = 'general'
             criteria.append(start.strftime("%Y%m%d"))
+        elif self.mission == 'cassini':
+            searchMethod = 'general'
+            if 'CO-E_SW_J_S-MAG-4-SUMM-1MINAVG-V2.0' in self.instrumentation:
+                criteria.append(start.strftime("%Y"))
+            else:
+                criteria.append(start.strftime("%Y%m%d"))
         else:
             searchMethod = 'general'
             raise Exception('mission not defined!')
@@ -309,13 +319,13 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+    def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
             instrumentation: a list in terms of the directory names at all levels below spacecraft and above year or files. For example, ['fgm', 'brst', 'l2']
             datasetAndVariables: this parameter should not be used by user. 
-            instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
+            instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
         Note:
             Necessary parameters include: datetimeRange, <[<[instrumentation, variables], datasetsAndVariables>, instrumentationRetrivingName, variableRetrivingNames], instrumentationVariablesWithRetrivingName>
             To retrieve data, use Spacecraft.data[instrumentationName][variableRetrivingName]
@@ -338,10 +348,13 @@ class Spacecraft:
                 self.loadData(datetimeRange=datetimeRange, instrumentationRetrivingName=instrumentationRetrivingName, variableRetrivingNames=variableRetrivingNames, datasetAndVariables=datasetAndVariables, cleanData=cleanData, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
         else:
             # major branch of loadData
-            variableRetrivingNames = variableRetrivingNames.copy()
-#            if 't' not in variableRetrivingNames:
-#                variables.insert(0, 0)
-#                variableRetrivingNames.insert(0, 't')
+            if variablesWithRetrivingNames:
+                variables = [tu[0] for tu in variablesWithRetrivingNames]
+            else:
+                variableRetrivingNames = variableRetrivingNames.copy()
+                if datasetAndVariables is not None:
+                    variables = datasetAndVariables[-1]
+                variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
             if datasetAndVariables is None:
                 if isinstance(instrumentation, str):
                     instrumentation = [instrumentation]
@@ -349,9 +362,8 @@ class Spacecraft:
                     datasetAndVariables = [self.mission, self.name, *instrumentation, variables]
                 else:
                     datasetAndVariables = [self.name, *instrumentation, variables]
-                variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
-            else:
-                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
+#            else:
+#                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
             datasetsAndVariables = [datasetAndVariables]
             data_ = readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
             logging.info(data_[0].keys())
@@ -521,7 +533,7 @@ def readCDFInfo(cdfFile):
     return varInfo, varInfoDict
 
 ##
-def findFileNames(path, strings=None, size='allSize', timeTag=None):
+def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf'):
     '''
     Purpose:
         This function is to find in the directory defined by <path> the names of files which according to 
@@ -537,13 +549,16 @@ def findFileNames(path, strings=None, size='allSize', timeTag=None):
             foundFileNames = []
             for entry in it:
                 if entry.is_file():
+                    _, fileExt = os.path.splitext(entry.name)
+                    if ext and fileExt.lower() != ext:
+                        continue
                     if size[0] == '<' and entry.stat().st_size < int(size[1:]):
                         fileNamesMeetingSize.append(entry.name)
                     elif size[0] == '>' and entry.stat().st_size > int(size[1:]):
                         fileNamesMeetingSize.append(entry.name)
                     elif size == 'allSize':
                         fileNamesMeetingSize.append(entry.name)
-            logging.debug("number of files meeting size criterion: {}".format(len(fileNamesMeetingSize)))
+            logging.debug("number of files with extension {ext} and meeting size criterion: {nf}".format(ext=ext, nf=len(fileNamesMeetingSize)))
             if strings:
                 if not isinstance(strings[0], list):
                     logging.debug("string criteria for searching:")
@@ -820,10 +835,10 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
 #    logging.info('record range:')
 #    logging.info(recordRange)
     for var in variables:
-        print('var: ', var)
+        logging.info('var: ' + var)
         majorData = True
         depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
-        print('depend0 ', depend0)
+        logging.info('depend0: '+ str(depend0))
         if depend0 is None:
             if varInfo[epochDataInd]['varInfo'].Variable == var:
                 pass
@@ -831,6 +846,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
                 majorData = False
         else:
             assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
+        logging.info('isMajorData: '+str(majorData))
         if majorData:
             if timeRange is not None:
 #                dataMajor[var] = cdfFile.varget(var, startrec=recordRange[0], endrec=recordRange[1])
@@ -847,7 +863,9 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
     Purpose: read data file from PDS (https://pds-ppi.igpp.ucla.edu/)
     Parameters:
         fileName: path to file without extension of the file.
+        dataFileExtension: this parameter is deprecated. The data file will be inferred from the info file.
     '''
+    fileDir, filebaseName = os.path.split(fileName)
     infoFile = fileName + infoFileExtension
     columnNames = []
     dataDict = {}
@@ -857,6 +875,11 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         for l1 in root:
             if 'File_Area_Observational' in l1.tag:
                 for l2 in l1:
+                    if 'File' in l2.tag:
+                        file_ = l2
+                        for child_ in file_:
+                            if 'file_name' in child_.tag:
+                                dataFileName = child_.text
                     if 'Table_Character' in l2.tag:
                         for l3 in l2:
                             if 'Record_Character' in l3.tag:
@@ -878,32 +901,93 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
     elif infoFileExtension == '.LBL':
         with open(infoFile, 'r') as f:
             info = f.readlines()
-        objectDict = {'objectCounts': 0}
-        objectDict_ = objectDict
+        lblObjectDict = {'objectCounts': 0}
+        lblObjectDict_ = lblObjectDict
         for lineInd, line in enumerate(info):
             if '=' in line:
                 field_, value_ = line.split('=')
                 field, value = field_.strip().strip('"'), value_.strip().strip('"')
                 if field == "END_OBJECT":
-                    assert value == objectDict_['objType']
-                    objectDict_ = objectDict_['upperDict']
+                    assert value == lblObjectDict_['objType']
+                    lblObjectDict_ = lblObjectDict_['upperDict']
                 elif field == "OBJECT":
                     newObj = {'objType': value,
-                              'upperDict': objectDict_,
+                              'upperDict': lblObjectDict_,
                               'objectCounts': 0}
-                    objectCounts = objectDict_['objectCounts']
-                    objectDict_['objectCounts'] += 1
-                    objectDict_[str(objectCounts)] = newObj
-                    objectDict_ = newObj
+                    objectCounts = lblObjectDict_['objectCounts']
+                    lblObjectDict_['objectCounts'] += 1
+                    lblObjectDict_[str(objectCounts)] = newObj
+                    lblObjectDict_ = newObj
                 else:
-                    objectDict_[field.lower()] = value
-#        dataFileName = objectDict['^TABLE']
-        fmtFileName = objectDict['0'].get("^structure")
+                    lblObjectDict_[field.lower()] = value
+        dataFileName = lblObjectDict['^table'].strip('"')
+        fmtFileName = lblObjectDict['0'].get("^structure")
         if fmtFileName:
             fmtFileName = fmtFileName.strip('"')
-            pass
+            pathToFMTFile = os.path.join(fileDir, fmtFileName)
+            with open(pathToFMTFile, 'r') as f:
+                info = f.readlines()
+            objectInd = -1
+            objectDicts = []
+            for lineInd, line in enumerate(info):
+                if line.count('=') == 1:
+                    field_, value_ = line.split('=')
+                    field, value = field_.strip(), value.strip()
+                    if field == 'OBJECT':
+                        objectInd +=1
+                        objectDict = {'fmtStartLine': lineInd}
+                        objectDicts.append(objectDict)
+                    elif field == 'END_OBJECT':
+                        objectDict['fmtEndLine_inclusive'] = lineInd
+                        if lineInd == len(info)-1:
+                            objectInfo = info[objectDict['fmtStartLine']:]
+                        else:
+                            objectInfo = info[objectDict['fmtStartLine']:objectDict['fmtEndLine_inclusive']+1]
+                        for objectLineInd, objectLine in enumerate(objectInfo):
+                            if '=' in objectLine:
+                                objectLineItems = objectLine.split('=')
+                                if objectLineItems[0].isupper():
+                                    objectField, objectValue = objectLineItems[0].strip(), '='.join(objectLineItems[1:]).strip()
+                                    if objectField == 'DESCRIPTION':
+                                        objectDict[objectField] = ''.join(objectInfo[objectLineInd:-1])
+                                        break
+                                    else:
+                                        objectDict[objectField] = objectValue
+            totalBytes = 0
+            itemNums = []
+            itemBytes = []
+            dataNames = []
+            fmt_i_list = []
+            for objectDict in objectDicts:
+                bytesNum = int(objectDict['BYTES'])
+                totalBytes += bytesNum
+                itemNum = int(objectDict.get('ITEMS', 1))
+                itemNums.append(itemNum)
+                itemBytes.append(objectDict.get('ITEMS_BYTES', objectDict['BYTES']))
+                dataName = objectDict['NAME']
+                dataNames.append(dataName)
+                dataType_ = objectDict['DATA_TYPE']
+                if '/*' in dataType_:
+                    index_ = dataType_.find('/*')
+                    dataType = dataType_[:index_].strip()
+                    objectDict['DATA_TYPE'] = dataType
+                else:
+                    dataType = dataType_
+                if dataType == 'PC_REAL':
+                    fmt_i_list.extend('f'*itemNum)
+                elif dataType == 'DATE':
+                    fmt_i_list.extend('c'*bytesNum)
+                    itemNums[-1] = bytesNum
+                elif dataType == 'LSB_UNSIGNED_INTEGER':
+                    if bytesNum == 1:
+                        fmt_i_list.append('B')
+                    elif bytesNum == 2:
+                        fmt_i_list.append('H')
+            fmt_i = '<'+''.join(fmt_i_list)
+            fmtsz = struct.calcsize(fmt_i)
+            assert fmtsz == totalBytes
         else:
-            columnsDict = objectDict['0']
+            columnsDict = lblObjectDict['0']
             columnCounts = columnsDict['objectCounts']
             for columnInd in range(columnCounts):
                 columnDict = columnsDict[str(columnInd)]
@@ -913,29 +997,69 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
                 for key in toDelKeys:
                     columnDict.pop(key, None)
                 dataDict[columnName] = columnDict
+    dataFilePath = os.path.join(fileDir, dataFileName)
+    _, dataFileExtension = os.path.splitext(dataFilePath)
     if dataFileExtension.lower() == '.tab':
-        dataFile = fileName + dataFileExtension
-    data_type = {}
-    for columnInd, columnName in enumerate(columnNames):
-        dataType = dataDict[columnName]['data_type']
-        if dataType in ['ASCII_Date_Time_YMD_UTC', 'TIME']:
-            timeName = columnName
-            timeType = dataType
-        elif dataType == 'ASCII_String':
-            pass
-        elif dataType in ['ASCII_Integer', 'ASCII_Real']:
-            data_type[columnName] = np.float64
-    if sep is None:
-        sep = '\s+'
-    data_ = pd.read_table(dataFile, sep=sep, names=columnNames, dtype=data_type)
-    if timeType == 'ASCII_Date_Time_YMD_UTC':
-        epoch = cdflib.cdfepoch.parse(list(data_[timeName].str[:-1]))
-    elif timeType == 'TIME':
-        epoch = cdflib.cdfepoch.parse(list(data_[timeName] + '00'))
-    data_[timeName] = epoch
-    for key in dataDict.keys():
-        dataDict[key]['data'] = data_[key].to_numpy()
-
+        data_type = {}
+        for columnInd, columnName in enumerate(columnNames):
+            dataType = dataDict[columnName]['data_type']
+            if dataType in ['ASCII_Date_Time_YMD_UTC', 'TIME']:
+                timeName = columnName
+                timeType = dataType
+            elif dataType == 'ASCII_String':
+                pass
+            elif dataType in ['ASCII_Integer', 'ASCII_Real']:
+                data_type[columnName] = np.float64
+        if sep is None:
+            sep = '\s+'
+        data_ = pd.read_table(dataFilePath, sep=sep, names=columnNames, dtype=data_type)
+        if timeType == 'ASCII_Date_Time_YMD_UTC':
+            epoch = cdflib.cdfepoch.parse(list(data_[timeName].str[:-1]))
+        elif timeType == 'TIME':
+            timeStringLen = len(data_[timeName].iloc[0])
+            if timeStringLen < 24:
+                stringExample = '2007-06-23T00:00:00.000'
+                supp = stringExample[timeStringLen:]
+            else:
+                raise Exception('time string too long')
+            epoch = cdflib.cdfepoch.parse(list(data_[timeName] + supp))
+        data_[timeName] = epoch
+        for key in dataDict.keys():
+            dataDict[key]['data'] = data_[key].to_numpy()
+    elif dataFileExtension.lower() == '.dat':
+        dataEntryList = []
+        with open(dataFilePath, 'rb') as f:
+            while True:
+                entry = f.read(fmtsz)
+                if not entry:
+                    break
+                data = struct.unpack(fmt_i, entry)
+                dataEntryList.append(data)
+        itemInd = 0
+        for objectInd, objectDict in enumerate(objectDicts):
+            itemNum = itemNums[objectInd]
+            entryIndNextStart = itemInd + itemNum
+            numberOfRecords = len(dataEntryList)
+            dataList = []
+            for entryInd, entry in enumerate(dataEntryList):
+                dataEntry = entry[itemInd:entryIndNextStart]
+                dataList.append(dataEntry)
+            if objectDict['DATA_TYPE'] == 'DATE':
+                dataArray = np.zeros(numberOfRecords)
+                for entryInd in range(numberOfRecords):
+                    dateStr = ''.join([ele.decode() for ele in dataList[entryInd]])
+                    year, dayInfo = dateStr.split('-')
+                    dayOfYear, timeInfo = dayInfo.split('T')
+                    hour, minute, secondInfo = timeInfo.split(':')
+                    second, millisecond = secondInfo.split('.')
+                    dataArray[entryInd] = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), 1, 1, int(hour), int(minute), int(second), int(millisecond)*1000) + timedelta(days=int(dayOfYear)-1)))
+            else:
+                dataArray = np.array(dataList)
+            objectDict['data'] = dataArray
+            columnName = objectDict['NAME']
+            columnNames.append(columnName)
+            dataDict[columnName] = objectDict
+            itemInd = entryIndNextStart
 
 #    with open(dataFile, 'r') as f:
 #        info = f.readlines()
