@@ -48,17 +48,6 @@ def butter_lowpass_filter(data, cutoff, fs, order=5, axis=-1):
     return y
 
 
-def moving_average(data, n=1, axis=0):
-    if axis != 0:
-        data = np.swapaxes(data, axis, 0)
-    ret = np.cumsum(data, axis=0)
-    ret[n:] = ret[n:] - ret[:-n]
-    ret = ret[n-1:] / n
-    if axis != 0:
-        ret = np.swapaxes(ret, axis, 0)
-    return ret
-
-
 def mvab(bVectors, returnStatisticalError=False, errorEstimation='analytical'):
     '''
     see Sonnerup and Scheible, Minimum and Maximum Variance Analysis in Analysis Methods for Multi-Spacecraft Data, ESA Publications Division, 1998
@@ -1471,4 +1460,3 @@ def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
     x_axis = normalized(np.cross(y_axis, z_axis))
     ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     return ssqBasisInICRFBasis
-
