@@ -1016,12 +1016,13 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         if timeType == 'ASCII_Date_Time_YMD_UTC':
             epoch = cdflib.cdfepoch.parse(list(data_[timeName].str[:-1]))
         elif timeType == 'TIME':
-            timeStringLen = len(data_[timeName].iloc[0])
+            timeString_ = data_[timeName].iloc[0]
+            timeStringLen = len(timeString_)
             if timeStringLen < 24:
                 stringExample = '2007-06-23T00:00:00.000'
                 supp = stringExample[timeStringLen:]
             else:
-                raise Exception('time string too long')
+                raise Exception('time string too long: {}'.format(timeString_))
             epoch = cdflib.cdfepoch.parse(list(data_[timeName] + supp))
         data_[timeName] = epoch
         for key in dataDict.keys():
