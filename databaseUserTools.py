@@ -417,6 +417,36 @@ class Spacecraft:
         if inPlace:
             self.data[instrumentation] = self.dataCleaned[instrumentation]
 
+
+class CelestialReferenceFrames:
+    def __init__(self):
+        self.vectors_in_ICRF = {}
+
+    def ksmBasisInICRFBasis(self, t, sunPositionFilePath=None, saturnPositionFilePath=None):
+        if 'sun_position' not in self.vectors_in_ICRF:
+            dataDict, _ = readHoriaonsData(sunPositionFilePath)
+            tSun = dataDict['Calendar Date (TDB)']['data']
+            posCartesianSun = np.concatenate([dataDict['X']['data'][:, None], dataDict['Y']['data'][:, None], dataDict['Z']['data'][:, None]], axis=-1)
+            self.vectors_in_ICRF.update({'sun_position': {'t': tSun, 'vector': posCartesianSun}})
+        if 'saturn_position' not in self.vectors_in_ICRF:
+            dataDict, _ = readHoriaonsData(saturnPositionFilePath)
+            tSaturn = dataDict['Calendar Date (TDB)']['data']
+            posCartesianSaturn = np.concatenate([dataDict['X']['data'][:, None], dataDict['Y']['data'][:, None], dataDict['Z']['data'][:, None]], axis=-1)
+            self.vectors_in_ICRF.update({'saturn_position': {'t': tSaturn, 'vector': posCartesianSaturn}})
+        t_range_available_sun = self.vectors_in_ICRF['sun_position']['t'][[0, -1]]
+        t_range_available_saturn = self.vectors_in_ICRF['saturn_position']['t'][[0, -1]]
+        t_ranges = np.concatenate([t_range_available_sun[None, :], t_range_available_saturn[None, :]], axis=0)
+        t_range_available = [np.max(t_ranges[:, 0]), np.min(t_ranges[:, 1])]
+        assert t_range_available[0] <= t[0] and t[1] <= t_range_available[1]
+        posDataDict = {
+                'tSaturn': self.vectors_in_ICRF['saturn_position']['t'],
+                'posCartesianSaturn': self.vectors_in_ICRF['saturn_position']['vector'],
+                'tSun': self.vectors_in_ICRF['sun_position']['t'],
+                'posCartesianSun': self.vectors_in_ICRF['sun_position']['vector'],
+                       }
+        ksmBasisInICRFBasisData = dat.ksmBasisInICRFBasis(t, **posDataDict)
+        return ksmBasisInICRFBasisData
+
 ##
 def extractFiles(databaseDir, workDataDir, datasets, interval, keepIfExist=True):
     '''
@@ -864,6 +894,7 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
     Parameters:
         fileName: path to file without extension of the file.
         dataFileExtension: this parameter is deprecated. The data file will be inferred from the info file.
+        sep: if dataFileExtension.lower() == '.tab', the separator used in the tab file
     '''
     fileDir, filebaseName = os.path.split(fileName)
     infoFile = fileName + infoFileExtension
@@ -905,7 +936,9 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         lblObjectDict_ = lblObjectDict
         for lineInd, line in enumerate(info):
             if '=' in line:
-                field_, value_ = line.split('=')
+                split_parts_ = line.split('=')
+                field_ = split_parts_[0]
+                value_ = '='.join(split_parts_[1:])
                 field, value = field_.strip().strip('"'), value_.strip().strip('"')
                 if field == "END_OBJECT":
                     assert value == lblObjectDict_['objType']
@@ -1018,12 +1051,23 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
         elif timeType == 'TIME':
             timeString_ = data_[timeName].iloc[0]
             timeStringLen = len(timeString_)
-            if timeStringLen < 24:
-                stringExample = '2007-06-23T00:00:00.000'
-                supp = stringExample[timeStringLen:]
-            else:
-                raise Exception('time string too long: {}'.format(timeString_))
-            epoch = cdflib.cdfepoch.parse(list(data_[timeName] + supp))
+            head_, tail_ = timeString_.split('T')
+            number_of_dashes = list(head_).count('-')
+            if number_of_dashes == 1:
+                stringExample = '2007-173T00:00:00'
+                t_strings = list(data_[timeName])
+                epoch = np.zeros(len(t_strings))
+                fmt = '%Y-%jT%H:%M:%S'
+                for tInd, t_string in enumerate(t_strings):
+                    epoch[tInd] = dat.datetime2epoch(datetime.strptime(t_string, fmt))
+            elif number_of_dashes == 2:
+                if timeStringLen < 24:
+                    stringExample = '2007-06-23T00:00:00.000'
+                    supp = stringExample[timeStringLen:]
+                else:
+                    raise Exception('time string too long: {}'.format(timeString_))
+                print(list(data_[timeName] + supp)[:10])
+                epoch = cdflib.cdfepoch.parse(list(data_[timeName] + supp))
         data_[timeName] = epoch
         for key in dataDict.keys():
             dataDict[key]['data'] = data_[key].to_numpy()
