@@ -3,6 +3,7 @@ __author__ = 'Yufei Zhou'
 import numpy as np
 import cdflib    # see github.com/MAVENSDC/cdflib
 import otherTools as ot
+import functools
 from datetime import datetime
 from itertools import combinations
 from scipy.signal import butter, lfilter, freqz
@@ -523,13 +524,21 @@ hourMinFormatterTT2000 = FuncFormatter(format_hourMinTT2000)
 def datetime2epoch(dateTime, epochType='CDF_EPOCH'):
     if epochType == 'CDF_EPOCH':
         return cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime))
+    elif epochType == 'CDF_TIME_TT2000':
+        return cdflib.cdfepoch.compute_tt2000(ot.datetime2list(dateTime))
     else:
         raise Exception("datetime object resolution to microsecond")
 
-def epoch2datetime(epoch):
-    return datetime(*cdflib.cdfepoch.breakdown(epoch)[:6])
+def epoch2datetime(epoch, epochType='CDF_EPOCH'):
+    if epochType == 'CDF_EPOCH':
+        return datetime(*cdflib.cdfepoch.breakdown_epoch(epoch)[:6])
+    elif epochType == 'CDF_TIME_TT2000':
+        return datetime(*cdflib.cdfepoch.breakdown_tt2000(epoch)[:6])
 
 class Epoch:
+    '''
+    This class is deprecated. use Epochs instead.
+    '''
     def __init__(self, dateTime=None, epoch=None, epochType='CDF_EPOCH'):
         self.epochType = epochType
         if dateTime:
@@ -568,15 +577,17 @@ class Epochs:
             dateTimeList: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance.
             epochs: a list nested to any degree of depth or a ndarray.
         '''
+        datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
+        epoch2datetimeWithEpochType = functools.partial(epoch2datetime, epochType=epochType)
         self.epochType = epochType
         if dateTimeList is not None:
             self.dateTimeList = dateTimeList
-            self.epochs = np.array(map_multi_dimensional_list(datetime2epoch, self.dateTimeList))
+            self.epochs = np.array(map_multi_dimensional_list(datetime2epochWithEpochType, self.dateTimeList))
         elif epochs is not None:
             if isinstance(epochs, list):
                 epochs = np.array(epochs)
             self.epochs = epochs
-            self.dateTimeList = map_multi_dimensional_list(epoch2datetime, epochs.tolist())
+            self.dateTimeList = map_multi_dimensional_list(epoch2datetimeWithEpochType, epochs.tolist())
 
     def epochRecords(self, ts, tolerance=1):
         '''
@@ -1472,3 +1483,14 @@ def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
     ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     return ssqBasisInICRFBasis
 
+def plotCartesianVectorTimeSeries(ax, t, data, label=None):
+    labelsF = ['${}_x$', '${}_y$', '${}_z$']
+    colors = ['m', 'g', 'b']
+    if label:
+        labels = [labelF.format(label) for labelF in labelsF]
+    for ind in range(3):
+        ax.plot(t, data[:, ind], color=colors[ind], label=labels[ind])
+    ax.plot(t, np.linalg.norm(data, axis=-1), color='k', label=label)
+    ax.set_ylabel(label)
+    ax.grid(True)
+    return ax

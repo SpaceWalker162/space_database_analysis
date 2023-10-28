@@ -852,18 +852,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
     dataMajor = {}
     dataAux = {} # data not dependant on epoch
     timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
-#    if epochType == 'CDF_EPOCH':
-#        epochRange = [cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-#        recordRange = cdfFile.epochrange_epoch(epochDataInd, *epochRange)
-#    elif epochType == 'CDF_EPOCH16':
-#        epochRange = [cdflib.cdfepoch.compute_epoch16(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-#        recordRange = cdfFile.epochrange_epoch16(epochDataInd, *epochRange)
-#    elif epochType == 'CDF_TIME_TT2000':
-#        epochRange = [cdflib.cdfepoch.compute_tt2000(ot.datetime2list(dateTime)) for dateTime in datetimeRange]
-#        recordRange = cdfFile.epochrange_tt2000(epochDataInd, *epochRange)
-#    recordRange = cdfFile.epochrange_epoch(epochDataInd, *epochRange)
-#    logging.info('record range:')
-#    logging.info(recordRange)
+    print(timeRange)
     for var in variables:
         logging.info('var: ' + var)
         majorData = True
@@ -879,8 +868,9 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
         logging.info('isMajorData: '+str(majorData))
         if majorData:
             if timeRange is not None:
-#                dataMajor[var] = cdfFile.varget(var, startrec=recordRange[0], endrec=recordRange[1])
                 dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
+                print('var', var)
+                print('varshape', dataMajor[var].shape)
             else:
                 dataMajor[var] = np.array([])
         else:

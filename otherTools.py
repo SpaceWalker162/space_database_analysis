@@ -197,5 +197,5 @@ def datetime2list(dateTime, epochType='CDF_EPOCH'):
         return [dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.microsecond//10**3]
     if epochType == 'CDF_EPOCH16':
         return [dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.microsecond//10**3, dateTime.microsecond%1000, 0, 0]
-    elif epochType == 'CDF_TT2000':
+    elif epochType == 'CDF_TIME_TT2000':
         return [dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.microsecond//10**3, dateTime.microsecond%1000, 0]
