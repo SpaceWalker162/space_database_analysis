@@ -327,6 +327,11 @@ def makeLeviCivitaTensor(order=3):
 
 
 def regularTetrahedron(a=1, alpha=0, beta=0, gamma=0):
+    '''
+    Parameters:
+        a: the length of the sides of the regular tetrahedron.
+        alpha, beta, gamma are the three Euler angles, see, e.g., Section 7.1.2 of Group Theory in Physics by Wu-Ki Tung (1985).
+    '''
     def R1(psi):
         return np.array([[1, 0, 0], [0, np.cos(psi), -np.sin(psi)], [0, np.sin(psi), np.cos(psi)]])
     def R2(psi):
@@ -359,6 +364,12 @@ def dipoleField(xGSE, M=-30438):
     r = np.linalg.norm(xGSE, axis=-1)[..., None]
     return M*np.concatenate([3*x1*x3, 3*x2*x3, (3*x3**2-r**2)], axis=-1) / r**5
 
+def corotationalElectricField(pos, M=-30348, omega=np.array([0, 0, 2*np.pi/24/3600])):
+    'pos in RE, B in nT'
+    velocity = np.cross(omega, pos*radius_Earth_in_meters)
+    magneticField = dipoleField(pos, M=M)*10**(-9)
+    e = -np.cross(velocity, magneticField)
+    return e
 
 def magnetosphericField(xGSE, M1=-30438, model="mirror", M2=-28*30438, subsolarDistance=None):
     '''xGSE in RE, B in nT, subsolarDistance should be in RE'''
@@ -493,6 +504,10 @@ def format_UT(t, pos=None):
     tStr = cdflib.cdfepoch.encode(t)
     return tStr[11:13] + tStr[14:19]
 
+def format_UTTT2000(t, pos=None):
+    tStr = cdflib.cdfepoch.encode_tt2000(t)
+    return tStr[11:13] + tStr[14:19]
+
 def format_hour(t, pos=None):
     return cdflib.cdfepoch.encode(t)[14:19]
 
@@ -513,6 +528,7 @@ monthFormatterTT2000 = FuncFormatter(format_monthTT2000)
 dayFormatter = FuncFormatter(format_day)
 dayFormatterTT2000 = FuncFormatter(format_dayTT2000)
 utFormatter = FuncFormatter(format_UT)
+utFormatterTT2000 = FuncFormatter(format_UTTT2000)
 hourFormatter = FuncFormatter(format_hour)
 hourFormatterTT2000 = FuncFormatter(format_hourTT2000)
 minFormatter = FuncFormatter(format_min)
@@ -599,6 +615,11 @@ class Epochs:
         records = np.argmin(np.abs(ts - epochs[..., None]), axis=-1)
         if self.epochType == 'CDF_EPOCH':
             if np.all(np.abs(ts[..., records] - epochs) < tolerance*1000):
+                return records
+            else:
+                raise Exception("records not found")
+        if self.epochType == 'CDF_TIME_TT2000':
+            if np.all(np.abs(ts[..., records] - epochs) < tolerance*10**9):
                 return records
             else:
                 raise Exception("records not found")
@@ -1483,14 +1504,58 @@ def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
     ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     return ssqBasisInICRFBasis
 
-def plotCartesianVectorTimeSeries(ax, t, data, label=None):
+def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None):
     labelsF = ['${}_x$', '${}_y$', '${}_z$']
     colors = ['m', 'g', 'b']
     if label:
         labels = [labelF.format(label) for labelF in labelsF]
     for ind in range(3):
         ax.plot(t, data[:, ind], color=colors[ind], label=labels[ind])
-    ax.plot(t, np.linalg.norm(data, axis=-1), color='k', label=label)
+    if norm:
+        ax.plot(t, np.linalg.norm(data, axis=-1), color='k', label=label)
     ax.set_ylabel(label)
     ax.grid(True)
     return ax
+
+def tetrahedronQuality(pos, method='qGM'):
+    '''
+    see Section 13.3 of Analysis Methods for Multi-Spacecraft Data for the methods
+    '''
+    x = pos - np.mean(pos, axis=-2)[..., None, :]
+    numberOfPoints = x.shape[-2]
+    R = x.swapaxes(-1, -2) @ x / numberOfPoints
+    trueVolume = np.sqrt(np.linalg.det(R))*8/3
+    combs = combinations(range(numberOfPoints), 3)
+    numberOfSurfaces = combinationCounts(numberOfPoints, 3)
+    surfaces = np.zeros((*x.shape[:-2], numberOfSurfaces, 3, 3))
+    for i, comb in enumerate(list(combs)):
+        surfaces[..., i, :, :] = x[..., comb, :]
+    areaOfSurfaces = surfaceOfThreePoints(surfaces)
+    trueSurface = np.sum(areaOfSurfaces, axis=-1)
+
+    combs = combinations(range(numberOfPoints), 2)
+    numberOfSides = combinationCounts(numberOfPoints, 2)
+    sides = np.zeros((*x.shape[:-2], numberOfSides, 2, 3))
+    for i, comb in enumerate(list(combs)):
+        sides[..., i, :, :] = x[..., comb, :]
+    averageLength = np.mean(np.linalg.norm(np.diff(sides, axis=-2).squeeze(), axis=-1), axis=-1)
+    idealSurface = averageLength**2 *np.sqrt(3)/4 * numberOfSurfaces
+    idealVolume = averageLength**3 /6/np.sqrt(2)
+    if method == 'qGM':
+        qualityParameter = trueVolume/idealVolume + trueSurface/idealSurface +1
+    elif method == 'ellipsoidalShape':
+        eigenSystemOfR = np.linalg.eig(R)
+        timingShape = eigenSystemOfR
+#        permutation = np.argsort(eigenSystemOfR[0])
+#        timingShape = (np.sqrt(eigenSystemOfR[0])[permutation], eigenSystemOfR[1][:, permutation])
+        qualityParameter = timingShape
+    return qualityParameter
+
+
+def surfaceOfThreePoints(pos):
+    vec = np.diff(pos, axis=-2)
+    surface = 0.5*np.linalg.norm(np.cross(vec[..., 0, :], vec[..., 1, :]), axis=-1)
+    return surface
+
+def combinationCounts(totalN, combN):
+    return np.math.factorial(totalN)//np.math.factorial(combN)//np.math.factorial(totalN-combN)

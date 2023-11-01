@@ -43,7 +43,22 @@ instrumentationDiviedIntoMonth = ['FULL', 'mms']
 missionInfo = {
         'mms': {
             'epochType': 'CDF_TIME_TT2000',
-            'multispacecraftMission': True},
+            'multispacecraftMission': True,
+            'dataset': [
+                {
+                'dataset_flags': ['fpi', 'fast'],
+                'dataset_file_time_gap': timedelta(seconds=7200)
+                },
+                {
+                'dataset_flags': ['edp', 'fast'],
+                'dataset_file_time_gap': timedelta(days=1)
+                },
+                {
+                'dataset_flags': ['edp', 'slow'],
+                'dataset_file_time_gap': timedelta(days=1)
+                }
+                        ]
+            },
         'cluster': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': True},
@@ -150,16 +165,20 @@ class Instrumentation:
 class DataFile(Instrumentation):
     '''
     '''
-    def __init__(self, mission=None, spacecraft=None, instrumentation=None, instrumentationPath=None, pathToDataset=None, splitedPathToDataset=None, dateTime=None, fileName=None, instrumentationObj=None, cdfFile=None, workDataDir=None, fileSize='allSize', epochType='CDF_EPOCH', silence=True, filePath=None, defineCDFFileQ=True):
+    def __init__(self, mission=None, spacecraft=None, instrumentation=None, instrumentationPath=None, pathToDataset=None, splitedPathToDataset=None, dateTime=None, timeRange=None, filePeriodRange=None, dataset_file_time_gap=None, fileName=None, instrumentationObj=None, cdfFile=None, workDataDir=None, fileSize='allSize', epochType='CDF_EPOCH', silence=True, filePath=None, filePaths=[], defineCDFFileQ=True):
         '''
         Parameter:
             workDataDir: the path to the directory of the working database
             splitedPathToDataset: a list in terms of the path to the dataset. For example, ['mms', 'mms1', 'fgm', 'brst', 'l2']
-            epoch: the epoch at which the destined file contain data
+            dateTime: the epoch at which the destined file contain data
+            timeRange: the time range in which all appropriate files shall be found. This is desigend for mms brst data.
+            filePeriodRange: the start time to the end time of the file to be found.
             fileSize: a string in the form of "<num" or ">num", where num is an integer whose unit is bytes. This parameter define either that the size of the file should be less than num bytes, or that its size greater than num bytes. The default value for this parameter is "allSize" which allow for all file size.
             silence: to print nothing
 
         '''
+        logging.debug('head of DataFile:')
+        logging.debug(timeRange)
         if isinstance(instrumentationObj, Instrumentation):
             mission = instrumentationObj.mission
             spacecraft = instrumentationObj.spacecraft
@@ -175,9 +194,15 @@ class DataFile(Instrumentation):
 #            self.dateTime = datetime(*cdflib.cdfepoch.breakdown(epoch)[:6])
 #        elif dateTime is not None:
         self.dateTime = dateTime
+        self.timeRange = timeRange
+        self.filePeriodRange = filePeriodRange
+        self.dataset_file_time_gap = dataset_file_time_gap
+        if self.filePeriodRange is not None:
+            self.dataset_file_time_gap = self.filePeriodRange[1] - self.filePeriodRange[0]
 #            self.epoch = cdflib.cdfepoch.compute_epoch(ot.datetime2list(dateTime))
         self.fileName = fileName
         self.filePath = filePath
+        self.filePaths = filePaths
         self.cdfFile = cdfFile
 #        for crit in instrumentationFileUnderYear:
 #            if all([name in self.pathToDataset for name in crit]):
@@ -186,37 +211,47 @@ class DataFile(Instrumentation):
 #                break
 #        else:
 #            self.pathToFile = os.path.join(self.pathToDataset, self.dateTime.strftime('%Y'), self.dateTime.strftime('%m'))
-        if not self.filePath:
+        if not self.filePath and not self.filePaths:
             self.findFilePath(size=fileSize, silence=silence)
         if self.filePath:
             if defineCDFFileQ:
                 self.defineCDFFile()
+        if self.filePaths:
+            if defineCDFFileQ:
+                self.defineCDFFiles()
 
 
     def defineCDFFile(self):
         self.cdfFile = cdflib.CDF(self.filePath)
+
+    def defineCDFFiles(self):
+        self.cdfFiles = []
+        for path in self.filePaths:
+            self.cdfFiles.append(cdflib.CDF(path))
 
     def findFilePath(self, size='allSize', silence=True):
         '''
         Purpose:
             This function is to find the file stored in self.workDataDir.
         '''
-        start = self.dateTime
-        end = start + timedelta(seconds=1)
+        if self.dateTime:
+            start = self.dateTime
+            end = start + timedelta(seconds=1)
         absolutePathToDataset = os.path.join(self.workDataDir, self.pathToDataset)
         criteria = []
         timeTag = None
         logging.debug("mission: {}".format(self.mission))
         if self.mission == 'mms':
-            searchMethod = 'general'
-            criteria.extend(self.instrumentation.copy())
-            criteria.append(start.strftime("%Y%m%d"))
-            if 'fgm' in self.instrumentationPath:
-                if 'brst' in self.instrumentationPath:
-                    timeTag = start
-            elif 'fpi' in self.instrumentationPath:
-                if 'brst' in self.instrumentationPath:
-                    timeTag = start
+            if 'brst' in self.instrumentationPath:
+                searchMethod = 'allFilesInTimeRange'
+            else:
+                searchMethod = 'general'
+                criteria.extend(self.instrumentation.copy())
+                if self.dataset_file_time_gap is not None:
+                    if self.dataset_file_time_gap < timedelta(days=1):
+                        criteria.append(self.filePeriodRange[0].strftime("%Y%m%d%H"))
+                    elif self.dataset_file_time_gap == timedelta(days=1):
+                        criteria.append(start.strftime("%Y%m%d"))
         elif self.mission == 'cluster':
             if 'cis-hia' in self.instrumentationPath:
                 searchMethod = 'general'
@@ -252,12 +287,20 @@ class DataFile(Instrumentation):
             searchMethod = 'general'
             raise Exception('mission not defined!')
         logging.debug("Looking for data files in: {}".format(absolutePathToDataset))
+        logging.debug("search method: {}".format(searchMethod))
         if searchMethod == 'general':
             fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNames, strings=criteria, size=size, timeTag=timeTag)
 #            = findFileNames(absolutePathToFile)
+        elif searchMethod == 'allFilesInTimeRange':
+            getTimeFromNameFunc_ = getTimeFromName
+            logging.debug('searchmethod:')
+            logging.debug(self.timeRange)
+            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInTimeRange, timeRange=self.timeRange, getTimeFromNameFunc=getTimeFromNameFunc_, strings=criteria, size=size)
         elif searchMethod == 'ClusterCAA':
             fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInInterval, interval=interval, strings=self.instrumentation)
 #            fileNames = findFileNamesInInterval(absolutePathToFile, interval=interval, strings=self.instrumentation)
+        else:
+            raise Exception('unknown method for searching files')
         numFiles = len(fileNames)
         if numFiles == 1:
             self.fileName = fileNames[0]
@@ -268,7 +311,14 @@ class DataFile(Instrumentation):
             logging.warning("No file was found.")
 #            raise Exception('No file was found.')
         elif numFiles > 1:
-            logging.debug("More than one files were found:" + ("\n{}"*numFiles).format(*fileNames))
+            if searchMethod == 'allFilesInTimeRange':
+                paths = []
+                for fileName in fileNames:
+                    paths.append(os.path.join(absolutePathToFile, fileName))
+                self.filePaths = paths
+            else:
+                logging.warning("More than one files were found:" + ("\n{}"*numFiles).format(*fileNames))
+
 #            raise Exception('More than one files were found.')
 
 
@@ -276,16 +326,29 @@ class DataFile(Instrumentation):
         fileNames = func(absolutePathToDataset, **para)
         absolutePathToFile = absolutePathToDataset
         if len(fileNames) == 0:
-            absolutePathToDatasetYear = os.path.join(absolutePathToDataset, self.dateTime.strftime('%Y'))
+            if self.dateTime:
+                absolutePathToDatasetYear = os.path.join(absolutePathToDataset, self.dateTime.strftime('%Y'))
+            elif self.timeRange:
+                if self.timeRange[0].year == self.timeRange[1].year:
+                    absolutePathToDatasetYear = os.path.join(absolutePathToDataset, self.timeRange[0].strftime('%Y'))
+                else:
+                    pass
             absolutePathToFile = absolutePathToDatasetYear
             logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYear))
             fileNames = func(absolutePathToDatasetYear, **para)
             if len(fileNames) == 0:
-                absolutePathToDatasetYearMonth = os.path.join(absolutePathToDatasetYear, self.dateTime.strftime('%m'))
+                if self.dateTime:
+                    absolutePathToDatasetYearMonth = os.path.join(absolutePathToDatasetYear, self.dateTime.strftime('%m'))
+                elif self.timeRange:
+                    if self.timeRange[0].month == self.timeRange[1].month:
+                        absolutePathToDatasetYearMonth = os.path.join(absolutePathToDatasetYear, self.timeRange[0].strftime('%m'))
+                    else:
+                        pass
                 absolutePathToFile = absolutePathToDatasetYearMonth
                 logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYearMonth))
                 fileNames = func(absolutePathToDatasetYearMonth, **para)
         return fileNames, absolutePathToFile
+
 
 class Spacecraft:
     '''
@@ -365,12 +428,130 @@ class Spacecraft:
 #            else:
 #                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
             datasetsAndVariables = [datasetAndVariables]
-            data_ = readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
+            data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
             logging.info(data_[0].keys())
             dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
             self.data.update({instrumentationRetrivingName: dataInDict})
             if cleanData:
                 self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
+
+    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+        '''
+        Purpose:
+            This function is to load data.
+        Parameters:
+            workDataDir: the path to the directory of working data base
+            datasetAndVariables: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['Epoch', 'Btotal']}}}}}. Please note that Epoch and Btotal are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']].
+            datetimeRange: a list of two elements which define the time interval during which the data is to be retrieved. [start, end]
+            workDataDirsBak: a list of backup databases
+            copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak: self-explanatory
+        Return:
+            variablesAllDataset: a list of dict. The list is for multiple datasets, the keys of a dict is for the variables in a dataset.
+        '''
+        start = datetimeRange[0]
+        end = datetimeRange[1]
+        if isinstance(datasetsAndVariables, dict):
+            datasetsAndVariablesList = ot.dict2list(datasetsAndVariables)
+        elif isinstance(datasetsAndVariables, list):
+            datasetsAndVariablesList = datasetsAndVariables
+        variablesAllDataset = []
+        for datasetAndVariables in datasetsAndVariablesList:
+            logging.info('finding files for dataset and variables: ')
+            logging.info(datasetAndVariables)
+            splitedPathToDataset = datasetAndVariables[:-1]
+            variableNames = datasetAndVariables[-1]
+            start_ = start
+            variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
+            variablesInADatasetIndependantOnTime = []
+            if 'brst' in splitedPathToDataset:
+                allowedTimeExtension = timedelta(seconds=600)
+                dataFileTimeRange = [start-allowedTimeExtension, end]
+                logging.debug('brst time range')
+                logging.debug(dataFileTimeRange)
+                dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, timeRange=dataFileTimeRange)
+                workDataFile = dataFile
+                if workDataDirsBak:
+                    for workDataDirBak in workDataDirsBak:
+                        dataFileBak = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, timeRange=dataFileTimeRange, defineCDFFileQ=False)
+                        if dataFileBak.filePaths:
+                            desiredDataPaths = []
+                            for filePathBak in dataFileBak.filePaths:
+                                workFilePath = os.path.join(os.path.relpath(filePathBak, workDataDirBak), workDataDir)
+                                if workFilePath in workDataFile.filePaths:
+                                    desiredDataPaths.append(workFilePath)
+                                else:
+                                    if copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak:
+                                        destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
+                                        desiredDataPaths.append(destFilePath)
+                                    else:
+                                        desiredDataPaths.append(filePathBak)
+                desiredDataPaths.sort()
+                dataFile = DataFile(filePaths=desiredDataPaths)
+                for fileInd, cdfFile in enumerate(dataFile.cdfFiles):
+                    logging.info('reading data file: {}'.format(dataFile.filePaths[fileInd]))
+                    logging.info('datetimeRange: {}'.format(datetimeRange))
+                    dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    logging.info('reading data file done: {}'.format(dataFile.filePath))
+                    variablesInADatasetOverDatetimeRange.append(dataMajor)
+                    variablesInADatasetIndependantOnTime.append(dataAux)
+            else:
+                logging.debug('not in brst')
+                while start_ < end:
+                    for possible_dataset in missionInfo[self.mission]['dataset']:
+                        if all([flag in splitedPathToDataset for flag in possible_dataset['dataset_flags']]):
+                            dataset_file_time_gap = possible_dataset.get('dataset_file_time_gap')
+                            break
+                    else:
+                        dataset_file_time_gap = timedelta(days=1)
+                    if dataset_file_time_gap == timedelta(days=1):
+                        beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
+                        endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
+                    elif dataset_file_time_gap < timedelta(days=1):
+                        beginOfTheDay = datetime(start_.year, start_.month, start_.day)
+                        completePeriodBefore = (start_ - beginOfTheDay)//dataset_file_time_gap
+                        beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * dataset_file_time_gap
+                        endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*dataset_file_time_gap 
+                    if endOfTheFilePeriod >= end:
+                        datetimeRange = [start_, end]
+                    else:
+                        datetimeRange = [start_, endOfTheFilePeriod]
+                    dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod])
+                    if dataFile.filePath:
+                        pass
+                    elif workDataDirsBak:
+                        for workDataDirBak in workDataDirsBak:
+                            dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
+                            if dataFile.filePath:
+                                if copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak:
+                                    filePath = dataFile.filePath
+
+                                    destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
+                                    dataFile = DataFile(filePath=destFilePath)
+                                break
+                    if not dataFile.filePath:
+                        raise Exception('data file not found')
+                    assert dataFile.cdfFile is not None
+        #            logging.info(splitedPathToDataset)
+        #            logging.info(dataFile.cdfFile)
+                    logging.info('reading data file: {}'.format(dataFile.filePath))
+                    logging.info('datetimeRange: {}'.format(datetimeRange))
+                    dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    logging.info('reading data file done: {}'.format(dataFile.filePath))
+                    variablesInADatasetOverDatetimeRange.append(dataMajor)
+                    variablesInADatasetIndependantOnTime.append(dataAux)
+                    start_ = endOfTheFilePeriod
+            variables = {}
+            for var in variablesInADatasetOverDatetimeRange[0].keys():
+                variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+            for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
+                logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
+                for key in variablesInADatasetIndependantOnTime[fileInd].keys():
+                    assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+            variables.update(variablesInADatasetIndependantOnTime[0])
+    #        for indOfVariable in range(len(variablesInADatasetOverDatetimeRange[0])):
+    #            variables.append(np.concatenate([variables[indOfVariable] for variables in variablesInADatasetOverDatetimeRange], axis=0))
+            variablesAllDataset.append(variables)
+        return variablesAllDataset
 
     def cleanData(self, instrumentation, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, tName='t', gapThreshold=None, minNumberOfPoints=None, returnShiftQ=None):
         '''
@@ -448,6 +629,20 @@ class CelestialReferenceFrames:
         return ksmBasisInICRFBasisData
 
 ##
+def workDataDirCopy(filePath, workDataDir, workDataDirBak):
+    relpath = os.path.relpath(filePath, workDataDirBak)
+    destFilePath = os.path.join(workDataDir, relpath)
+    logging.warning('file not found in wordDataDir, but found in workDataDirBak: {}'.format(destFilePath))
+    logging.warning('now copying...')
+    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+    cmdArgs = ['cp', filePath, destFilePath]
+    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process.wait()
+    logging.info('{} copied'.format(destFilePath))
+    logging.warning('file copied')
+    return destFilePath
+
+
 def extractFiles(databaseDir, workDataDir, datasets, interval, keepIfExist=True):
     '''
     Purpose:
@@ -562,6 +757,76 @@ def readCDFInfo(cdfFile):
         varInfo.append(varInfoDict[var])
     return varInfo, varInfoDict
 
+
+def getTimeFromName(name):
+    '''
+    Purpose: get a datetime.datetime object from the name of a data file such as mms brst data file: mms1_fpi_brst_l2_dis-moms_20151007163101_v3.3.0.cdf
+    Parameters:
+        name: the name of the file
+    '''
+    timeString = name.split('_')[-2]
+    fmt = "%Y%m%d%H%M%S"
+    return datetime.strptime(timeString, fmt)
+
+def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, strings=None, size='allSize', ext='.cdf'):
+    '''
+    Purpose:
+        This function is to find in the directory defined by <path> the names of those files whose data are in the timeRange. This function is designed for mms brst data file whose name is irregular in epoch division and only contains the start of the epoch.
+        from whose name its time information can be obtained by getTimeFromNameFunc
+    Parameters:
+        path: a string defining a directory
+        timeRange: a list of two datetime.datetime objects
+        getTimeFromNameFunc: a function whose input is a string of file name and output is a datetime.datetime object
+        strings: a list of strings that should be contained in the objective file name.
+        size: a string in the form of "<num" or ">num", where num is an integer whose unit is bytes. This parameter define either that the size of the file should be less than num bytes, or that its size greater than num bytes. The default value for this parameter is "allSize" which allow for all file size.
+    '''
+    logging.debug('find name in time range:')
+    logging.debug(timeRange)
+    if os.path.exists(path):
+        with os.scandir(path) as it:
+            fileNamesMeetingSize = []
+            foundFileNames = []
+            for entry in it:
+                if entry.is_file():
+                    _, fileExt = os.path.splitext(entry.name)
+                    if ext and fileExt.lower() != ext:
+                        continue
+                    if size[0] == '<' and entry.stat().st_size < int(size[1:]):
+                        fileNamesMeetingSize.append(entry.name)
+                    elif size[0] == '>' and entry.stat().st_size > int(size[1:]):
+                        fileNamesMeetingSize.append(entry.name)
+                    elif size == 'allSize':
+                        fileNamesMeetingSize.append(entry.name)
+            logging.debug("number of files with extension {ext} and meeting size criterion: {nf}".format(ext=ext, nf=len(fileNamesMeetingSize)))
+        fileNamesAfterSelection_ = fileNamesMeetingSize
+        if strings:
+            fileNamesAfterSelection = []
+            if not isinstance(strings[0], list):
+                logging.debug("string criteria for searching:")
+                logging.debug(strings)
+                while fileNamesAfterSelection_:
+                    fileName_ = fileNamesAfterSelection_.pop(0)
+                    if all(string in fileName_ for string in strings):
+                        fileNamesAfterSelection.append(fileName_)
+            else:
+                while fileNamesAfterSelection_:
+                    fileName_ = fileNamesAfterSelection_.pop(0)
+                    for stringList in strings:
+                        if all(string in fileName_ for string in strings):
+                            fileNamesAfterSelection.append(fileName_)
+                            break
+            fileNamesAfterSelection_ = fileNamesAfterSelection
+        fileNamesAfterSelection = []
+        for fileName in fileNamesAfterSelection_:
+            datetimeOfFile = getTimeFromNameFunc(fileName)
+            if datetimeOfFile >= timeRange[0] and datetimeOfFile <= timeRange[1]:
+                fileNamesAfterSelection.append(fileName)
+        foundFileNames = fileNamesAfterSelection
+    else:
+        logging.debug("path does not exist: {}".format(path))
+        foundFileNames = []
+    return foundFileNames
+
 ##
 def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf'):
     '''
@@ -573,6 +838,10 @@ def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf'):
         size: a string in the form of "<num" or ">num", where num is an integer whose unit is bytes. This parameter define either that the size of the file should be less than num bytes, or that its size greater than num bytes. The default value for this parameter is "allSize" which allow for all file size.
         timeTag: a datetime object that specify the time accurate to second. This parameter is designed for mms brst data which is segmented over a few minutes.
     '''
+    if timeTag:
+        logging.debug('time tag')
+        logging.debug(timeTag)
+    logging.debug('size: {}'.format(size))
     if os.path.exists(path):
         with os.scandir(path) as it:
             fileNamesMeetingSize = []
@@ -783,16 +1052,16 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
         datasetsAndVariablesList = datasetsAndVariables
     variablesAllDataset = []
     for datasetAndVariables in datasetsAndVariablesList:
+        logging.info('finding files for dataset and variables: ')
+        logging.info(datasetAndVariables)
         splitedPathToDataset = datasetAndVariables[:-1]
         variableNames = datasetAndVariables[-1]
         start_ = start
         variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
         variablesInADatasetIndependantOnTime = []
         while start_ < end:
-#            start_NextDayDateTime = datetime(*cdflib.cdfepoch.breakdown(start_)[:6]) + timedelta(days=1)
             start_NextDayDateTime = start_ + timedelta(days=1)
             endOfTheDay = datetime(start_NextDayDateTime.year, start_NextDayDateTime.month, start_NextDayDateTime.day)
-#            epochEndOfTheDay = cdflib.cdfepoch.compute_epoch(ot.datetime2list(endOfTheDay))
             if endOfTheDay >= end:
                 datetimeRange = [start_, end]
             else:
@@ -852,9 +1121,8 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
     dataMajor = {}
     dataAux = {} # data not dependant on epoch
     timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
-    print(timeRange)
     for var in variables:
-        logging.info('var: ' + var)
+        logging.debug('var: ' + var)
         majorData = True
         depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
         logging.info('depend0: '+ str(depend0))
@@ -869,10 +1137,12 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
         if majorData:
             if timeRange is not None:
                 dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
-                print('var', var)
-                print('varshape', dataMajor[var].shape)
+                logging.debug('data type: {}'.format(str(type(dataMajor[var]))))
+                if dataMajor[var] is None:
+                    dataMajor[var] = np.array([])
             else:
                 dataMajor[var] = np.array([])
+                raise Exception('time range is None')
         else:
             dataAux[var] = cdfFile.varget(var)
     return dataMajor, dataAux
