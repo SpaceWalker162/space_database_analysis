@@ -177,8 +177,6 @@ class DataFile(Instrumentation):
             silence: to print nothing
 
         '''
-        logging.debug('head of DataFile:')
-        logging.debug(timeRange)
         if isinstance(instrumentationObj, Instrumentation):
             mission = instrumentationObj.mission
             spacecraft = instrumentationObj.spacecraft
@@ -332,7 +330,7 @@ class DataFile(Instrumentation):
                 if self.timeRange[0].year == self.timeRange[1].year:
                     absolutePathToDatasetYear = os.path.join(absolutePathToDataset, self.timeRange[0].strftime('%Y'))
                 else:
-                    pass
+                    raise Exception('time range across years')
             absolutePathToFile = absolutePathToDatasetYear
             logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYear))
             fileNames = func(absolutePathToDatasetYear, **para)
@@ -343,7 +341,7 @@ class DataFile(Instrumentation):
                     if self.timeRange[0].month == self.timeRange[1].month:
                         absolutePathToDatasetYearMonth = os.path.join(absolutePathToDatasetYear, self.timeRange[0].strftime('%m'))
                     else:
-                        pass
+                        raise Exception('time range across months')
                 absolutePathToFile = absolutePathToDatasetYearMonth
                 logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYearMonth))
                 fileNames = func(absolutePathToDatasetYearMonth, **para)
