@@ -68,6 +68,12 @@ missionInfo = {
         'ace': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
+        'wind': {
+            'epochType': 'CDF_EPOCH',
+            'multispacecraftMission': False},
+        'geotail': {
+            'epochType': 'CDF_EPOCH',
+            'multispacecraftMission': False},
         'cassini': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
@@ -380,58 +386,69 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True, fromFile=None):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
             instrumentation: a list in terms of the directory names at all levels below spacecraft and above year or files. For example, ['fgm', 'brst', 'l2']
+            instrumentationRetrivingName: a string.
             datasetAndVariables: this parameter should not be used by user. 
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
+            fromFile: to load data from a file, the file name is given by this parameter.
         Note:
-            Necessary parameters include: datetimeRange, <[<[instrumentation, variables], datasetsAndVariables>, instrumentationRetrivingName, variableRetrivingNames], instrumentationVariablesWithRetrivingName>
+            Necessary parameters include: <fromFile, [datetimeRange, <[<[instrumentation, variables], datasetsAndVariables>, instrumentationRetrivingName, variableRetrivingNames], instrumentationVariablesWithRetrivingName>]>
             To retrieve data, use Spacecraft.data[instrumentationName][variableRetrivingName]
         '''
-        if instrumentationVariablesWithRetrivingName:
-            # recursive branch of loadData
-            if isinstance(instrumentationVariablesWithRetrivingName, dict):
-                instrumentationVariablesWithRetrivingNameList = ot.dict2list(instrumentationVariablesWithRetrivingName)
-                logging.debug(instrumentationVariablesWithRetrivingNameList)
-            if isinstance(instrumentationVariablesWithRetrivingName, list):
-                instrumentationVariablesWithRetrivingNameList = instrumentationVariablesWithRetrivingName
-            for ins in instrumentationVariablesWithRetrivingNameList:
-                dataset = ins[:-1]
-                logging.debug(dataset)
-                instrumentationRetrivingName = ins[-1][0]
-                variables = [varPair[0] for varPair in ins[-1][1:]]
-                variableRetrivingNames = [varPair[1] for varPair in ins[-1][1:]]
-                datasetAndVariables = dataset
-                datasetAndVariables.append(variables)
-                self.loadData(datetimeRange=datetimeRange, instrumentationRetrivingName=instrumentationRetrivingName, variableRetrivingNames=variableRetrivingNames, datasetAndVariables=datasetAndVariables, cleanData=cleanData, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
-        else:
-            # major branch of loadData
-            if variablesWithRetrivingNames:
-                variables = [tu[0] for tu in variablesWithRetrivingNames]
+        if fromFile:
+            cdfFile = cdflib.CDF(fromFile)
+            if variablesWithRetrivingNames is not None:
+                variableNames = variablesWithRetrivingNames
             else:
-                variableRetrivingNames = variableRetrivingNames.copy()
-                if datasetAndVariables is not None:
-                    variables = datasetAndVariables[-1]
-                variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
-            if datasetAndVariables is None:
-                if isinstance(instrumentation, str):
-                    instrumentation = [instrumentation]
-                if self.mission in multispacecraftMissions:
-                    datasetAndVariables = [self.mission, self.name, *instrumentation, variables]
+                variableNames = None
+            dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames, epochType=self.epochType)
+            self.data.update({instrumentationRetrivingName: dataFromACdfFile})
+        else:
+            if instrumentationVariablesWithRetrivingName:
+                # recursive branch of loadData
+                if isinstance(instrumentationVariablesWithRetrivingName, dict):
+                    instrumentationVariablesWithRetrivingNameList = ot.dict2list(instrumentationVariablesWithRetrivingName)
+                    logging.debug(instrumentationVariablesWithRetrivingNameList)
+                if isinstance(instrumentationVariablesWithRetrivingName, list):
+                    instrumentationVariablesWithRetrivingNameList = instrumentationVariablesWithRetrivingName
+                for ins in instrumentationVariablesWithRetrivingNameList:
+                    dataset = ins[:-1]
+                    logging.debug(dataset)
+                    instrumentationRetrivingName = ins[-1][0]
+                    variables = [varPair[0] for varPair in ins[-1][1:]]
+                    variableRetrivingNames = [varPair[1] for varPair in ins[-1][1:]]
+                    datasetAndVariables = dataset
+                    datasetAndVariables.append(variables)
+                    self.loadData(datetimeRange=datetimeRange, instrumentationRetrivingName=instrumentationRetrivingName, variableRetrivingNames=variableRetrivingNames, datasetAndVariables=datasetAndVariables, cleanData=cleanData, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
+            else:
+                # major branch of loadData
+                if variablesWithRetrivingNames:
+                    variables = [tu[0] for tu in variablesWithRetrivingNames]
                 else:
-                    datasetAndVariables = [self.name, *instrumentation, variables]
-#            else:
-#                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
-            datasetsAndVariables = [datasetAndVariables]
-            data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
-            logging.info(data_[0].keys())
-            dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
-            self.data.update({instrumentationRetrivingName: dataInDict})
-            if cleanData:
-                self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
+                    variableRetrivingNames = variableRetrivingNames.copy()
+                    if datasetAndVariables is not None:
+                        variables = datasetAndVariables[-1]
+                    variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
+                if datasetAndVariables is None:
+                    if isinstance(instrumentation, str):
+                        instrumentation = [instrumentation]
+                    if self.mission in multispacecraftMissions:
+                        datasetAndVariables = [self.mission, self.name, *instrumentation, variables]
+                    else:
+                        datasetAndVariables = [self.name, *instrumentation, variables]
+    #            else:
+    #                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
+                datasetsAndVariables = [datasetAndVariables]
+                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
+                logging.info(data_[0].keys())
+                dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
+                self.data.update({instrumentationRetrivingName: dataInDict})
+                if cleanData:
+                    self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
     def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
         '''
@@ -595,6 +612,18 @@ class Spacecraft:
             self.dataCleaned[instrumentation].update({varName: var})
         if inPlace:
             self.data[instrumentation] = self.dataCleaned[instrumentation]
+
+    def renameData(self, instrumentation, variablesAndNewNames=None):
+        '''
+        Purpose:
+            rename data.
+        Parameters:
+            instrumentation: a string for the name of the instrumentation.
+            variablesAndNewNames: example: [('Epoch', 't'), ('v_gse', 'v')]
+        '''
+        dic = self.data[instrumentation]
+        for old_key, new_key in variablesAndNewNames:
+            dic[new_key] = dic.pop(old_key)
 
 
 class CelestialReferenceFrames:
@@ -1114,36 +1143,43 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
 
 ##
 def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType='CDF_EPOCH'):
-    varInfo, varInfoDict = readCDFInfo(cdfFile)
-    epochDataInd = 0 # in most cases, epoch is the first zVariable
-    dataMajor = {}
-    dataAux = {} # data not dependant on epoch
-    timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
-    for var in variables:
-        logging.debug('var: ' + var)
-        majorData = True
-        depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
-        logging.info('depend0: '+ str(depend0))
-        if depend0 is None:
-            if varInfo[epochDataInd]['varInfo'].Variable == var:
-                pass
+    if variables:
+        varInfo, varInfoDict = readCDFInfo(cdfFile)
+        epochDataInd = 0 # in most cases, epoch is the first zVariable
+        dataMajor = {}
+        dataAux = {} # data not dependant on epoch
+        timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
+        for var in variables:
+            logging.debug('var: ' + var)
+            majorData = True
+            depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
+            logging.info('depend0: '+ str(depend0))
+            if depend0 is None:
+                if varInfo[epochDataInd]['varInfo'].Variable == var:
+                    pass
+                else:
+                    majorData = False
             else:
-                majorData = False
-        else:
-            assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
-        logging.info('isMajorData: '+str(majorData))
-        if majorData:
-            if timeRange is not None:
-                dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
-                logging.debug('data type: {}'.format(str(type(dataMajor[var]))))
-                if dataMajor[var] is None:
+                assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
+            logging.info('isMajorData: '+str(majorData))
+            if majorData:
+                if timeRange is not None:
+                    dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
+                    logging.debug('data type: {}'.format(str(type(dataMajor[var]))))
+                    if dataMajor[var] is None:
+                        dataMajor[var] = np.array([])
+                else:
                     dataMajor[var] = np.array([])
+                    raise Exception('time range is None')
             else:
-                dataMajor[var] = np.array([])
-                raise Exception('time range is None')
-        else:
-            dataAux[var] = cdfFile.varget(var)
-    return dataMajor, dataAux
+                dataAux[var] = cdfFile.varget(var)
+        return dataMajor, dataAux
+    else:
+        cdfInfo = cdfFile.cdf_info()
+        dataFromACdfFile = {}
+        for var in cdfInfo.zVariables:
+            dataFromACdfFile[var] = cdfFile.varget(var)
+        return dataFromACdfFile
 
 
 def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', sep=None):
