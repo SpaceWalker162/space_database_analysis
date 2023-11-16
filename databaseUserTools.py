@@ -386,13 +386,13 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True, fromFile=None):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
             instrumentation: a list in terms of the directory names at all levels below spacecraft and above year or files. For example, ['fgm', 'brst', 'l2']
             instrumentationRetrivingName: a string.
-            datasetAndVariables: this parameter should not be used by user. 
+            datasetAndVariables: this parameter should not be used by user.
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
             fromFile: to load data from a file, the file name is given by this parameter.
         Note:
@@ -625,6 +625,20 @@ class Spacecraft:
         for old_key, new_key in variablesAndNewNames:
             dic[new_key] = dic.pop(old_key)
 
+    def maskData(self, instrumentations=None, value=-1.0*10**31):
+        if instrumentations is not None:
+            pass
+        else:
+            instrumentations = self.data.keys()
+        for instrumentation in instrumentations:
+            dic = self.data[instrumentation]
+            for key, varData in dic.items():
+                if np.issubdtype(varData.dtype, np.number):
+                    varData = np.ma.masked_equal(varData, value)
+                    varData = varData.filled(np.nan)
+                else:
+                    pass
+                dic[key] = varData
 
 class CelestialReferenceFrames:
     def __init__(self):
@@ -1150,6 +1164,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
         dataAux = {} # data not dependant on epoch
         timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
         for var in variables:
+            pad = cdfFile.varinq(var).Pad
             logging.debug('var: ' + var)
             majorData = True
             depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
@@ -1164,7 +1179,13 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
             logging.info('isMajorData: '+str(majorData))
             if majorData:
                 if timeRange is not None:
-                    dataMajor[var] = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
+                    varData = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
+                    if np.issubdtype(varData.dtype, np.number):
+                        varData = np.ma.masked_equal(varData, pad)
+                        varData = varData.filled(np.nan)
+                    else:
+                        pass
+                    dataMajor[var] = varData
                     logging.debug('data type: {}'.format(str(type(dataMajor[var]))))
                     if dataMajor[var] is None:
                         dataMajor[var] = np.array([])
@@ -1178,9 +1199,17 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
         cdfInfo = cdfFile.cdf_info()
         dataFromACdfFile = {}
         for var in cdfInfo.zVariables:
-            dataFromACdfFile[var] = cdfFile.varget(var)
+            pad = cdfFile.varinq(var).Pad
+            varData = cdfFile.varget(var)
+            if np.issubdtype(varData.dtype, np.number):
+                varData = np.ma.masked_equal(varData, pad)
+                if np.issubdtype(varData.dtype, np.integer):
+                    varData = varData.astype(np.float32)
+                varData = varData.filled(np.nan)
+            else:
+                pass
+            dataFromACdfFile[var] = varData
         return dataFromACdfFile
-
 
 def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', sep=None):
     '''
