@@ -4,6 +4,7 @@ import numpy as np
 import cdflib    # see github.com/MAVENSDC/cdflib
 import otherTools as ot
 import functools
+import matplotlib as mpl
 from datetime import datetime
 from itertools import combinations
 from scipy.signal import butter, lfilter, freqz
@@ -1559,3 +1560,65 @@ def surfaceOfThreePoints(pos):
 
 def combinationCounts(totalN, combN):
     return np.math.factorial(totalN)//np.math.factorial(combN)//np.math.factorial(totalN-combN)
+
+
+## functions below are for producing data used for a study. These will be transfer to some other standalone tool file
+def dumpAxData(cdfFile, ax):
+        ax_children = ax.get_children()
+        for childInd, ax_child in enumerate(ax_children):
+            varName = 'object_{}'.format(len(cdfFile.zvars))
+            varData = None
+            if type(ax_child) == mpl.lines.Line2D:
+                varData = ax_child.get_xydata()
+                var_attrs = {
+                        'type': str(type(ax_child)),
+                        'data_description': 'abscissa and ordinate of the curve',
+                        'label': ax_child.get_label(),
+                        }
+            elif type(ax_child) == mpl.patches.FancyArrow:
+                varData = np.array([ax_child._x, ax_child._y, ax_child._dx, ax_child._dy])
+                var_attrs = {
+                        'type': str(type(ax_child)),
+                        'data_description': 'arrow x, y, dx, dy',
+                        }
+            elif type(ax_child) == mpl.text.Text:
+                varData = np.array(ax_child.get_position())
+                var_attrs = {
+                        'type': str(type(ax_child)),
+                        'data_description': 'position of the text',
+                        'text': ax_child.get_text(),
+                        }
+            varDType = 'CDF_DOUBLE'
+            if varData is not None:
+                dumpPlotData(cdfFile=cdfFile, varData=varData, varName=varName, varDType=varDType, dim_size=[], num_elements=1, rec_vary=True, var_attrs=var_attrs)
+
+
+def dumpPlotData(cdfFile, varData=None, varName=None, varDType=None, dim_size=[], num_elements=1, rec_vary=True, var_attrs={}):
+    if not dim_size:
+        dim_size = varData.shape[1:]
+    varDType = cdflib.cdfwrite.CDF._datatype_token(varDType)
+    var_spec = {
+            'Variable': varName,
+            'Data_Type': varDType,
+            'Num_Elements': num_elements,
+            'Rec_Vary': rec_vary,
+            'Dim_Sizes': dim_size,
+                }
+    cdfFile.write_var(var_spec, var_attrs=var_attrs, var_data=varData)
+
+def getAxesInfoDict(ax):
+    axInfoDict = {
+            'panel_title': ax.get_title(),
+            'panel_x_label': ax.get_xlabel(),
+            'panel_y_label': ax.get_ylabel(),
+            }
+    return axInfoDict
+
+def get_twin(ax, axis):
+    assert axis in ("x", "y")
+    siblings = getattr(ax, f"get_shared_{axis}_axes")().get_siblings(ax)
+    twins = []
+    for sibling in siblings:
+        if sibling.bbox.bounds == ax.bbox.bounds and sibling is not ax:
+            twins.append(sibling)
+    return twins

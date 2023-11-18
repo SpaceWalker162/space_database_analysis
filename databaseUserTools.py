@@ -406,6 +406,7 @@ class Spacecraft:
             else:
                 variableNames = None
             dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames, epochType=self.epochType)
+            cdfFile.close()
             self.data.update({instrumentationRetrivingName: dataFromACdfFile})
         else:
             if instrumentationVariablesWithRetrivingName:
@@ -506,6 +507,7 @@ class Spacecraft:
                     logging.info('reading data file: {}'.format(dataFile.filePaths[fileInd]))
                     logging.info('datetimeRange: {}'.format(datetimeRange))
                     dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    cdfFile.close()
                     logging.info('reading data file done: {}'.format(dataFile.filePath))
                     variablesInADatasetOverDatetimeRange.append(dataMajor)
                     variablesInADatasetIndependantOnTime.append(dataAux)
@@ -551,6 +553,7 @@ class Spacecraft:
                     logging.info('reading data file: {}'.format(dataFile.filePath))
                     logging.info('datetimeRange: {}'.format(datetimeRange))
                     dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    cdfFile.close()
                     logging.info('reading data file done: {}'.format(dataFile.filePath))
                     variablesInADatasetOverDatetimeRange.append(dataMajor)
                     variablesInADatasetIndependantOnTime.append(dataAux)
@@ -1138,6 +1141,7 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
             logging.info('reading data file: {}'.format(dataFile.filePath))
             logging.info('datetimeRange: {}'.format(datetimeRange))
             dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+            cdfFile.close()
             logging.info('reading data file done: {}'.format(dataFile.filePath))
             variablesInADatasetOverDatetimeRange.append(dataMajor)
             variablesInADatasetIndependantOnTime.append(dataAux)
