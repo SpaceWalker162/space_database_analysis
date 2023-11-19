@@ -1,7 +1,7 @@
 # Space Database and Analysis
 ## Acknowledgment
 
-Please use the following to acknowledge use of IRFU-Matlab in your publications:
+Please use the following to acknowledge use of Space Database and Analysis in your publications:
 
 > Data analysis was performed using the Space Database and Analysis package available at https://github.com/SpaceWalker162/space_database_analysis
 
