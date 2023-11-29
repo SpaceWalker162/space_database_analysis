@@ -406,7 +406,6 @@ class Spacecraft:
             else:
                 variableNames = None
             dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames, epochType=self.epochType)
-            cdfFile.close()
             self.data.update({instrumentationRetrivingName: dataFromACdfFile})
         else:
             if instrumentationVariablesWithRetrivingName:
@@ -507,7 +506,6 @@ class Spacecraft:
                     logging.info('reading data file: {}'.format(dataFile.filePaths[fileInd]))
                     logging.info('datetimeRange: {}'.format(datetimeRange))
                     dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange, epochType=epochType)
-                    cdfFile.close()
                     logging.info('reading data file done: {}'.format(dataFile.filePath))
                     variablesInADatasetOverDatetimeRange.append(dataMajor)
                     variablesInADatasetIndependantOnTime.append(dataAux)
@@ -546,17 +544,14 @@ class Spacecraft:
                                     dataFile = DataFile(filePath=destFilePath)
                                 break
                     if not dataFile.filePath:
-                        raise Exception('data file not found')
-                    assert dataFile.cdfFile is not None
-        #            logging.info(splitedPathToDataset)
-        #            logging.info(dataFile.cdfFile)
-                    logging.info('reading data file: {}'.format(dataFile.filePath))
-                    logging.info('datetimeRange: {}'.format(datetimeRange))
-                    dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
-                    cdfFile.close()
-                    logging.info('reading data file done: {}'.format(dataFile.filePath))
-                    variablesInADatasetOverDatetimeRange.append(dataMajor)
-                    variablesInADatasetIndependantOnTime.append(dataAux)
+                        logging.info('data file not found')
+                    else:
+                        logging.info('reading data file: {}'.format(dataFile.filePath))
+                        logging.info('datetimeRange: {}'.format(datetimeRange))
+                        dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+                        logging.info('reading data file done: {}'.format(dataFile.filePath))
+                        variablesInADatasetOverDatetimeRange.append(dataMajor)
+                        variablesInADatasetIndependantOnTime.append(dataAux)
                     start_ = endOfTheFilePeriod
             variables = {}
             for var in variablesInADatasetOverDatetimeRange[0].keys():
@@ -673,6 +668,32 @@ class CelestialReferenceFrames:
         return ksmBasisInICRFBasisData
 
 ##
+def spacecraftsDataResampling(spacecrafts, source, dataName, timeName='t', resamplingT=None, standardSCInd=0):
+    '''
+    Parameters:
+        resamplingT: an one-dimensional array of epoch to be used as the epoch for the resampled data.
+        standardSCInd: an integer representing which spacecraft in the list of spacecrafts will provide its epoch as the standard one. If this is used, resamplingT will be
+    '''
+    dimensionOfData = spacecrafts[0].data[source][dataName].shape
+    numberOfSpacecrafts = len(spacecrafts)
+    if isinstance(standardSCInd, int):
+        resamplingT = spacecrafts[standardSCInd].data[source][timeName]
+        resamplingSCInds = np.delete(np.arange(numberOfSpacecrafts), standardSCInd)
+    elif isinstance(resamplingT, np.ndarray):
+        resamplingSCInds = np.arange(numberOfSpacecrafts)
+    else:
+        raise Exception('epoch for resampled data is not defined')
+    dataAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, *dimensionOfData[1:]))
+    for scInd in resamplingSCInds:
+        spacecraft = spacecrafts[scInd]
+        t_ = spacecraft.data[source][timeName]
+        data_ = spacecraft.data[source][dataName]
+        dataAllSpacecrafts[:, scInd, ...] = dat.dataFillAndLowPass(t_, data_, resamplingT=resamplingT)
+    if isinstance(standardSCInd, int):
+        dataAllSpacecrafts[:, standardSCInd, ...] = spacecrafts[standardSCInd].data[source][dataName]
+    return resamplingT, dataAllSpacecrafts
+
+
 def workDataDirCopy(filePath, workDataDir, workDataDirBak):
     relpath = os.path.relpath(filePath, workDataDirBak)
     destFilePath = os.path.join(workDataDir, relpath)
@@ -1141,7 +1162,6 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
             logging.info('reading data file: {}'.format(dataFile.filePath))
             logging.info('datetimeRange: {}'.format(datetimeRange))
             dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
-            cdfFile.close()
             logging.info('reading data file done: {}'.format(dataFile.filePath))
             variablesInADatasetOverDatetimeRange.append(dataMajor)
             variablesInADatasetIndependantOnTime.append(dataAux)
