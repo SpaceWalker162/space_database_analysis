@@ -24,13 +24,13 @@ from scipy.optimize import curve_fit
 import scipy.interpolate as interpolate
 import scipy.special
 import xml.etree.ElementTree as ET
-from databaseTools import *
 import logging
 from wolframclient.language import wl
 from wolframclient.evaluation import WolframLanguageSession
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 import space_database_analysis.dataAnalysisTools as dat
+from space_database_analysis.databaseTools import *
 
 '''
 <A, B> means either A or B
