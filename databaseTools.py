@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 import urllib3
 import time
-import otherTools as ot
+import space_database_analysis.otherTools as ot
 import copy
 import ast
 import cdflib
@@ -15,7 +15,7 @@ import cdflib
 import functools
 import threading
 import socket
-import databaseUserTools as dut
+import space_database_analysis.databaseUserTools as dut
 #import concurrent.futures
 import logging
 import ctypes

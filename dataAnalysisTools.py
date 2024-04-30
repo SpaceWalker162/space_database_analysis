@@ -2,7 +2,7 @@ __author__ = 'Yufei Zhou'
 
 import numpy as np
 import cdflib    # see github.com/MAVENSDC/cdflib
-import otherTools as ot
+import space_database_analysis.otherTools as ot
 import functools
 import matplotlib as mpl
 from datetime import datetime
@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 import scipy.special
 import logging
+import spacepy.coordinates as sppcoo
 
 
 '''
@@ -593,6 +594,7 @@ class Epochs:
         Parameters:
             dateTimeList: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance.
             epochs: a list nested to any degree of depth or a ndarray.
+            epochType: CDF_EPOCH, CDF_TIME_TT2000
         '''
         datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
         epoch2datetimeWithEpochType = functools.partial(epoch2datetime, epochType=epochType)
@@ -806,6 +808,7 @@ def alfvenSpeed(BStrength, n):
     return alfvenSpeed
 
 
+## Coordinates
 def cartesian2spherical(vectors):
     '''
     Parameters:
@@ -1027,6 +1030,38 @@ def c1BasisInC2Basis(c1BasisInC3Basis, c2BasisInC3Basis):
     c3BasisInC2Basis = np.linalg.inv(c2BasisInC3Basis)
     return c1BasisInC3Basis @ c3BasisInC2Basis
 
+
+def unit_quaternion_spherical_linear_interpolation(tNew, tOri, q):
+    '''
+    Purpose:
+        to interpolate the unit quaternion for coordinate transformation of vectors. see the Calibration and Measurement Algorithms Document for MMS, G-7
+    Parameters:
+        tNew: the x-coordinates at which to evaluate the interpolated values
+        tOri: 1-D array [n], the x-coordinates of the original data
+        q: an array [n, ..., 4], original data
+    '''
+    tNewStartInd = 0
+    qNew = np.zeros((len(tNew), *q.shape[1:]))
+    for tInd in range(len(tOri)-1):
+        tNewToSearch = tNew[tNewStartInd:]
+        t1 = tOri[tInd]
+        t2 = tOri[tInd+1]
+        t12 = tOri[tInd:tInd+2]
+        q12 = q[tInd:tInd+2]
+        tDiff = (tNewToSearch[:, None] - t12[None, :])
+        mask = np.prod(tDiff * np.array([1, -1])[None, :], axis=-1, dtype=np.float64) >= 0
+        t = tNewToSearch[mask]
+        u = (t - t1)/(t2-t1)
+#        print('len t: ', len(t))
+        qNew_ = quaternionMultiply((q12[0][None, :], quaternionPower(quaternionMultiply((sppcoo.quaternionConjugate(q12[0]), q12[1])), u)))
+#        tt_ = quaternionPower(quaternionMultiply(sppcoo.quaternionConjugate(q12[0]), q12[1]), u)
+#        qNew_ = quaternionMultiply(q12[0][None, :], tt_)
+        tNewNextStartInd = tNewStartInd + len(t)
+        qNew[tNewStartInd:tNewNextStartInd] = qNew_
+        tNewStartInd = tNewNextStartInd
+    return qNew
+
+
 def angleBetweenVectors(v1, v2):
     '''
     Purpose:
@@ -1084,6 +1119,32 @@ def leastSquarePolynomialApproximation(j, x, d, omega=None, regularizationMethod
     elif solver == 'direct':
         c = np.linalg.solve(R, J)
         return c
+
+
+def leastSquarePolynomialApproximationErrorEstimation(x, d, omega=None, dj=None):
+    '''
+    Purpose:
+        to estimate error for the function leastSquarePolynomialApproximation.
+    Parameters:
+        x: the sampling nodes of dimension [..., M, r] where M is the number of samples, r is the number of variables of the sampled function
+        d: the total degree of the polynomial
+        omega: the weight matrix
+        dj: dimension [..., s] where s is the number of functions
+    Return:
+        if solver == 'direct', returns include:
+            c: of dimension [...,h, s] where h=binomial(d+r,r), is the coefficient of polynomial approximation
+    for more info see in Notes: Mathematics, subsubsection: multivariate least square approximation on canonical basis.
+    '''
+    r = x.shape[-1]
+    M = x.shape[-2]
+    vandermondeMatrix = multivariateVandermondeMatrix(x, d)
+    h = vandermondeMatrix.shape[-1]
+    if omega is None:
+        omega = np.identity(M)
+    R = np.swapaxes(vandermondeMatrix, -1, -2) @ omega @ vandermondeMatrix
+    RInverse = np.linalg.inv(R)
+    dg = np.linalg.norm(RInverse @ np.swapaxes(vandermondeMatrix, -1, -2) @ omega, axis=-1)[..., None] * dj[..., None, :]
+    return dg
 
 
 def lsIterate(R, J, c, hBlock, d):
@@ -1622,3 +1683,45 @@ def get_twin(ax, axis):
         if sibling.bbox.bounds == ax.bbox.bounds and sibling is not ax:
             twins.append(sibling)
     return twins
+
+## quaternion
+def quaternionPower(q, p, scalarPos='last'):
+    '''
+    Parameters:
+        q: quaternions of dimension [..., 4]
+        p: power
+    '''
+    if scalarPos == 'last':
+        halfTheta = np.arccos(q[..., -1])
+        qPoweredVector = q[..., :-1] / np.sin(halfTheta) * np.sin(halfTheta*p)[:, None]
+        qPoweredScalar = np.cos(halfTheta*p)
+        qPowered = np.concatenate((qPoweredVector, qPoweredScalar[..., None]), axis=-1)
+    return qPowered
+
+def quaternionMultiply(qs, scalarPos='last'):
+    '''
+    Purpose:
+        see the function name
+    Parameters:
+        qs: a list of q
+        q1: quaternions of dimension [..., 4]
+        q2: quaternions of dimension [..., 4]
+    '''
+    qs = list(qs)
+    if len(qs) == 2:
+        q1, q2 = qs
+        scalar = np.array([q1[..., -1] * q2[..., -1] - np.sum(q1[..., :-1] * q2[..., :-1], axis=-1)]).swapaxes(0, -1)
+        vector = np.cross(q1[..., :-1], q2[..., :-1]) + q1[..., -1, None] * q2[..., :-1] + q2[..., -1, None] * q1[..., :-1]
+        return np.concatenate((vector, scalar), axis=-1)
+    elif len(qs) > 2:
+       q2 = qs.pop()
+       q1 = qs.pop()
+       q = quaternionMultiply((q1, q2))
+       while len(qs) > 0:
+           q2 = q
+           q1 = qs.pop()
+           q = quaternionMultiply((q1, q2))
+       return q
+    else: raise Exception
+
+#np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)

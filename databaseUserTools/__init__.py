@@ -13,6 +13,9 @@ import subprocess
 from cycler import cycler
 from itertools import combinations
 import json
+import cdasws
+from urllib.parse import urlparse
+from urllib.request import urlretrieve
 import struct
 from pprint import pprint
 from scipy.signal import butter, lfilter, freqz
@@ -25,9 +28,9 @@ from databaseTools import *
 import logging
 from wolframclient.language import wl
 from wolframclient.evaluation import WolframLanguageSession
-import otherTools as ot
-import databaseTools as dbt
-import dataAnalysisTools as dat
+import space_database_analysis.otherTools as ot
+import space_database_analysis.databaseTools as dbt
+import space_database_analysis.dataAnalysisTools as dat
 
 '''
 <A, B> means either A or B
@@ -78,6 +81,7 @@ missionInfo = {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
         }
+
 
 
 class Database:
@@ -386,7 +390,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, saveDataFileInWorkDataDir=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -443,14 +447,14 @@ class Spacecraft:
     #            else:
     #                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
                 datasetsAndVariables = [datasetAndVariables]
-                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak)
+                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, saveDataFileInWorkDataDir=saveDataFileInWorkDataDir)
                 logging.info(data_[0].keys())
                 dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
                 self.data.update({instrumentationRetrivingName: dataInDict})
                 if cleanData:
                     self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
-    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, saveDataFileInWorkDataDir=True):
         '''
         Purpose:
             This function is to load data.
@@ -459,7 +463,7 @@ class Spacecraft:
             datasetAndVariables: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['Epoch', 'Btotal']}}}}}. Please note that Epoch and Btotal are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']].
             datetimeRange: a list of two elements which define the time interval during which the data is to be retrieved. [start, end]
             workDataDirsBak: a list of backup databases
-            copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak: self-explanatory
+            saveDataFileInWorkDataDir: self-explanatory
         Return:
             variablesAllDataset: a list of dict. The list is for multiple datasets, the keys of a dict is for the variables in a dataset.
         '''
@@ -495,7 +499,7 @@ class Spacecraft:
                                 if workFilePath in workDataFile.filePaths:
                                     desiredDataPaths.append(workFilePath)
                                 else:
-                                    if copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak:
+                                    if saveDataFileInWorkDataDir:
                                         destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
                                         desiredDataPaths.append(destFilePath)
                                     else:
@@ -511,6 +515,24 @@ class Spacecraft:
                     variablesInADatasetIndependantOnTime.append(dataAux)
             else:
                 logging.debug('not in brst')
+#                dataset = Dataset(database=workDataDir, datasetId, timeRange)
+#                dataset.findDataFiles()
+#                dataset.file_names
+#                dataset.data_files
+#                for data_file in dataset.data_files:
+#                    if data_file.filePath:
+#                        pass
+#                    elif workDataDirsBak:
+#                        for workDataDirBak in workDataDirsBak:
+#                            dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
+#                            if dataFile.filePath:
+#                                if saveDataFileInWorkDataDir:
+#                                    filePath = dataFile.filePath
+#
+#                                    destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
+#                                    dataFile = DataFile(filePath=destFilePath)
+#                                break
+
                 while start_ < end:
                     for possible_dataset in missionInfo[self.mission]['dataset']:
                         if all([flag in splitedPathToDataset for flag in possible_dataset['dataset_flags']]):
@@ -533,16 +555,42 @@ class Spacecraft:
                     dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod])
                     if dataFile.filePath:
                         pass
-                    elif workDataDirsBak:
-                        for workDataDirBak in workDataDirsBak:
-                            dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
-                            if dataFile.filePath:
-                                if copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak:
-                                    filePath = dataFile.filePath
+                    else:
+                        if workDataDirsBak:
+                            for workDataDirBak in workDataDirsBak:
+                                dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
+                                if dataFile.filePath:
+                                    if saveDataFileInWorkDataDir:
+                                        filePath = dataFile.filePath
 
-                                    destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
-                                    dataFile = DataFile(filePath=destFilePath)
-                                break
+                                        destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
+                                        dataFile = DataFile(filePath=destFilePath)
+                                    break
+                        if not dataFile.filePath:
+                            cdaswsObj = cdasws.CdasWs()
+                            if missionInfo[self.mission]['multispacecraftMission']:
+                                datasetId = '_'.join(splitedPathToDataset[1:]).upper()
+                            else:
+                                datasetId = '_'.join(splitedPathToDataset).upper()
+                            endt_ = endOfTheFilePeriod-timedelta(hours=12)
+                            logging.info('looking for files from CDAWeb...')
+                            status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod+timedelta(hours=2), endt_)
+                            if len(files) == 1:
+                                fileURL = files[0]['Name']
+                                o = urlparse(fileURL)
+                                filePathInDatabase = os.path.join(*o.path.split('/')[3:])
+                                destFilePath = os.path.join(workDataDir, filePathInDatabase)
+                                os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+                                logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
+                                urlretrieve(fileURL, destFilePath)
+                                logging.info('downloaded')
+                                dataFile = DataFile(filePath=destFilePath)
+                            elif len(files) == 0:
+                                pass
+                            else:
+                                allFileNames = [file_['Name'] for file_ in files]
+                                logging.warning('found more than 1 files from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endt_, allFileNames))
+
                     if not dataFile.filePath:
                         logging.info('data file not found')
                     else:
@@ -637,6 +685,58 @@ class Spacecraft:
                 else:
                     pass
                 dic[key] = varData
+
+class Dataset:
+    def __init__(self, datasetId, timeRange):
+        self.datasetId = datasetId
+        self.timeRange = timeRange
+
+    def findDataFiles(self):
+        if 'brst' not in self.datasetId.lower():
+            logging.debug('not in brst')
+            temporal_coverage_per_file = dataset_info['temporal_coverage_per_file']
+            while start_ < end:
+                for possible_dataset in missionInfo[self.mission]['dataset']:
+                    if all([flag in splitedPathToDataset for flag in possible_dataset['dataset_flags']]):
+                        dataset_file_time_gap = possible_dataset.get('dataset_file_time_gap')
+                        break
+                else:
+                    dataset_file_time_gap = timedelta(days=1)
+                if dataset_file_time_gap == timedelta(days=1):
+                    beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
+                    endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
+                elif dataset_file_time_gap < timedelta(days=1):
+                    beginOfTheDay = datetime(start_.year, start_.month, start_.day)
+                    completePeriodBefore = (start_ - beginOfTheDay)//dataset_file_time_gap
+                    beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * dataset_file_time_gap
+                    endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*dataset_file_time_gap 
+                if endOfTheFilePeriod >= end:
+                    datetimeRange = [start_, end]
+                else:
+                    datetimeRange = [start_, endOfTheFilePeriod]
+                dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod])
+                if dataFile.filePath:
+                    pass
+                elif workDataDirsBak:
+                    for workDataDirBak in workDataDirsBak:
+                        dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
+                        if dataFile.filePath:
+                            if saveDataFileInWorkDataDir:
+                                filePath = dataFile.filePath
+
+                                destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
+                                dataFile = DataFile(filePath=destFilePath)
+                            break
+                if not dataFile.filePath:
+                    logging.info('data file not found')
+                else:
+                    logging.info('reading data file: {}'.format(dataFile.filePath))
+                    logging.info('datetimeRange: {}'.format(datetimeRange))
+                    dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    logging.info('reading data file done: {}'.format(dataFile.filePath))
+                    variablesInADatasetOverDatetimeRange.append(dataMajor)
+                    variablesInADatasetIndependantOnTime.append(dataAux)
+                start_ = endOfTheFilePeriod
 
 class CelestialReferenceFrames:
     def __init__(self):
@@ -1096,7 +1196,7 @@ def defineFile(workDataDir, splitedPathToDataset, epoch, size='AllSize', silence
     return dataFile
 
 
-def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak=True):
+def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, saveDataFileInWorkDataDir=True):
     '''
     Purpose:
         This function is to load data.
@@ -1105,7 +1205,7 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
         datasetAndVariables: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['Epoch', 'Btotal']}}}}}. Please note that Epoch and Btotal are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']].
         datetimeRange: a list of two elements which define the time interval during which the data is to be retrieved. [start, end]
         workDataDirsBak: a list of backup databases
-        copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak: self-explanatory
+        saveDataFileInWorkDataDir: self-explanatory
     Return:
         variablesAllDataset: a list of dict. The list is for multiple datasets, the keys of a dict is for the variables in a dataset.
     '''
@@ -1138,7 +1238,7 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
                 for workDataDirBak in workDataDirsBak:
                     dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, defineCDFFileQ=False)
                     if dataFile.filePath:
-                        if copyDataFileToWorkDataDirIfDataOnlyInWorkDataDirsBak:
+                        if saveDataFileInWorkDataDir:
                             relpath = os.path.relpath(dataFile.filePath, workDataDirBak)
                             destFilePath = os.path.join(workDataDir, relpath)
                             logging.info('copying {}'.format(destFilePath))

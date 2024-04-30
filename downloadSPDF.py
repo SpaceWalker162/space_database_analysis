@@ -1,9 +1,9 @@
 import os
-import databaseTools as dbt
 from ftplib import FTP_TLS
-import otherTools as ot
 import copy
 import logging
+import space_database_analysis.otherTools as ot
+import space_database_analysis.databaseTools as dbt
 #import reconnecting_ftp
 
 downloadDataDir = '/media/yufei/Elements1/data' #This is where you want to store the downloaded files
