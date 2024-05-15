@@ -1,3 +1,5 @@
+import os
+import copy
 import space_database_analysis.otherTools as ot
 from space_database_analysis.databaseTools.downloadSPDF import downloadSPDF
 
@@ -38,4 +40,5 @@ for spacecraftName in spacecraftNames:
 #for spacecraftName in spacecraftNames:
 #    dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 
-downloadSPDF(downloadDataDir, databaseDirs, dataNameDict)
+logFileDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/temp/downloadSPDF')
+downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource='from_log')

@@ -22,12 +22,96 @@ import ctypes
 import queue
 #from _thread import interrupt_main
 
+__readftpFileNameLog ='readftpFileName.log'
+__readFTPDirLog = 'readFTPDir.log'
 ## run this file under the destination directory 
 
 dataTypeTransformationDict_PDS = {
         'TIME': 'CDF_EPOCH',
         'ASCII_REAL': 'CDF_FLOAT',
         }
+
+
+class Database:
+
+    def __init__(self, databasePaths=[]):
+        self.paths = databasePaths
+
+
+    def removeOutdatedFiles(self):
+        '''
+        Purpose: SPDF from time to time updates the version of data files. Therefore in the database there could be multiple files being multiple versions of the same data. This function removes the files of older version if a newer version presents in the database.
+        '''
+        outdatedFilePaths = self.getOutdatedFilePaths()
+        for filePath in outdatedFilePaths:
+            os.remove(filePath)
+
+    def getOutdatedFilePaths(self, verbose=False):
+        def getVersionFromFileName(fileName):
+            '''
+            Expected file name format example: bedatkjo-wekjfjk_jehwoi_jhfiwu10398_39823_v2.1.2.cdf
+            '''
+            fileNameWithoutExt, ext = os.path.splitext(fileName)
+            fileNameComp = fileNameWithoutExt.split('_')
+            fileNameBase = '_'.join(fileNameComp[:-1])
+            if fileNameBase:
+                pass
+            else:
+                return
+            try:
+                assert ext.lower() == '.cdf'
+                assert fileNameComp[-1][0].lower() == 'v'
+                fileVersion = [int(s_) for s_ in fileNameComp[-1][1:].split('.')]
+            except:
+                return
+            return (fileNameBase, fileVersion, ext)
+        ##
+        def getDirDic(para):
+            return tuple(para[:-4])
+
+        outdatedFilePaths = []
+        for databaseDir in self.paths:
+            fileInfoDict = readFileInfoRecursively(path=databaseDir, verbose=verbose, facts=None)
+            dirKeys = set(ot.doAtLeavesOfADict(dic=fileInfoDict, do=getDirDic))
+            for ind, dirKey in enumerate(dirKeys):
+                if dirKey:
+                    dirPath = os.path.join(*dirKey)
+                    dic = fileInfoDict.getSubDictTreeByKeys(dirKey)
+                    fileNames = list(dic.keys())
+                else:
+                    continue
+                while len(fileNames) > 0:
+                    fileName = fileNames.pop()
+                    ret = getVersionFromFileName(fileName)
+                    if ret:
+                        fileNameBase, fileVersion, fileExt = ret
+                    else:
+                        continue
+                    for fileName_ in fileNames:
+                        ret_ = getVersionFromFileName(fileName_)
+                        if ret_:
+                            fileNameBase_, fileVersion_, fileExt_ = ret_
+                        else:
+                            continue
+                        if fileNameBase == fileNameBase_ and fileExt == fileExt_:
+                            for vInd in range(len(fileVersion)):
+                                if fileVersion[vInd] > fileVersion_[vInd]:
+                                    fileNameOfOldVersion = fileName_
+                                elif fileVersion[vInd] < fileVersion_[vInd]:
+                                    fileNameOfOldVersion = fileName
+                                else:
+                                    fileNameOfOldVersion = None
+                                if fileNameOfOldVersion:
+                                    outdatedFilePaths.append(os.path.join(databaseDir, dirPath, fileNameOfOldVersion))
+                                    break
+                            else:
+                                print(fileName)
+                                print(fileName_)
+                                raise Exception('something went wrong')
+        return outdatedFilePaths
+
+
+
 
 def dirsInit(path, dictOfDirs):
     for supperDir, subDir in dictOfDirs.items():
@@ -205,6 +289,7 @@ class FTPDownloadCommander:
     def reportProgress(self):
         logging.info('progress: {}/{}'.format(self.processedN, self.worksN))
         logging.info('failed: {}'.format(len(self.failedWorks)))
+        logging.info('active threads: {}'.format(threading.active_count()))
 
     def processQueue(self):
         def listenToWorkers():
@@ -629,20 +714,25 @@ def downloadFTPTree(ftp, ftpPath=None, localPath=None, verbose=False):
     downloadFTPRecursively(ftp, verbose=verbose)
 
 
-def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.', verbose=False, facts=None, logFileHandle=None):
+def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.', verbose=False, facts=None, logFileDir='', logFileHandle=None):
     '''
     Parameters:
         ftpPath: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': 'fpi', 'mms2': 'fpi'}}
     '''
-    def func_base(para, ftp, verbose, facts, logFileHandle):
+    def func_base(para, **keywords):
+        '''
+        Parameters:
+            **keywords: should contain ftp, verbose, facts, logFileDir, logFileHandle
+
+        '''
         ftpPath_ = '/'.join(para[:-1])
-        fileInfoDict = readFTPFileInfoRecursively(ftp=ftp, ftpPath=ftpPath_, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+        fileInfoDict = readFTPFileInfoRecursively(ftpPath=ftpPath_, **keywords)
         para[-1][para[-3]] = {para[-2]: fileInfoDict}
         return None
 
     if logFileHandle is None:
-        readFTPDirLog = 'readFTPDir.log'
-        readftpFileNameLog = 'readftpFileName.log'
+        readFTPDirLog = os.path.join(logFileDir, __readFTPDirLog)
+        readftpFileNameLog = os.path.join(logFileDir, __readftpFileNameLog)
         fFTPFile = open(readftpFileNameLog, 'w')
         fFTPDir = open(readFTPDirLog, 'w')
         logFileHandle = (fFTPDir, fFTPFile)
@@ -654,7 +744,7 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
         lgMess = ftp.login()
         print(lgMess)
         ftp.cwd(ftpDir)
-    func = functools.partial(func_base, ftp=ftp, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+    func = functools.partial(func_base, ftp=ftp, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
 
     if isinstance(ftpPath, str):
         fileInfoDict = {}
@@ -672,7 +762,7 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
         for objName, objFact in objs:
             objAbsName = '/'.join([ftpPath, objName])
             if objFact['type'] == 'dir':
-                fileInfoDict_ = readFTPFileInfoRecursively(ftp, ftpPath=objAbsName, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+                fileInfoDict_ = readFTPFileInfoRecursively(ftp, ftpPath=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
                 fileInfoDict[objName] = fileInfoDict_
             elif objFact['type'] == 'file':
                 del objFact['type']
@@ -702,7 +792,8 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
     return fileInfoDict
 
 
-def loadFileInfoDict(readftpFileNameLog='readftpFileName.log'):
+def loadFileInfoDict(logFileDir=''):
+    readftpFileNameLog = os.path.join(logFileDir, __readftpFileNameLog)
     with open(readftpFileNameLog, 'r') as f:
         info = f.read().splitlines()
     infoList = []

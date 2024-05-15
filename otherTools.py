@@ -76,6 +76,17 @@ class DictTree(dict):
                 subDictTree = DictTree(item)
                 subDictTree.print(depth=depth+1)
 
+    def getSubDictTreeByKeys(self, keys):
+        '''
+        keys: a tuple or a list such as ['a', 'b', 'c']
+        return:
+            a dictTree obtained by using keys consecutively. For example, if keys = ['a', 'b', 'c'], return self['a']['b']['c']
+        '''
+        dic = self
+        for key in keys:
+            dic = dic[key]
+        return DictTree(dic)
+
 def compareDictRecursively(d1, d2):
     d1Sole = {}
     for key, d1Value in d1.items():

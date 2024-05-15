@@ -325,7 +325,7 @@ class DataFile(Instrumentation):
                     paths.append(os.path.join(absolutePathToFile, fileName))
                 self.filePaths = paths
             else:
-                logging.warning("More than one files were found:" + ("\n{}"*numFiles).format(*fileNames))
+                logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
 
 #            raise Exception('More than one files were found.')
 
@@ -797,8 +797,8 @@ def spacecraftsDataResampling(spacecrafts, source, dataName, timeName='t', resam
 def workDataDirCopy(filePath, workDataDir, workDataDirBak):
     relpath = os.path.relpath(filePath, workDataDirBak)
     destFilePath = os.path.join(workDataDir, relpath)
-    logging.warning('file not found in wordDataDir, but found in workDataDirBak: {}'.format(destFilePath))
-    logging.warning('now copying...')
+    logging.warning('file not found in wordDataDir {}, but found in workDataDirBak: {}'.format(workDataDir, workDataDirBak))
+    logging.warning('now copying to {} ...'.format(destFilePath))
     os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
     cmdArgs = ['cp', filePath, destFilePath]
     process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
