@@ -1,13 +1,16 @@
 import os
 import copy
+import sys
 import space_database_analysis.otherTools as ot
 from space_database_analysis.databaseTools.downloadSPDF import downloadSPDF
 
-downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
-#downloadDataDir = '..\\data'
+if sys.platform == 'linux':
+    downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
+    databaseDirs = ['/home/yufei/Documents/remoteDatabase'] #This is a list that contain all database. The files that exist in these databases will be omitted in downloading.
+elif sys.platform == 'win32':
+    downloadDataDir = '..\\data'
+    databaseDirs = ['\\\\10.249.183.237\\data']
 
-databaseDirs = ['/home/yufei/Documents/remoteDatabase'] #This is a list that contain all database. The files that exist in these databases will be omitted in downloading.
-#databaseDirs = ['\\\\10.249.183.237\\data']
 #databaseDirs = []
 
 readFTP = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
