@@ -242,10 +242,49 @@ class DataFile(Instrumentation):
         Purpose:
             This function is to find the file stored in self.workDataDir.
         '''
+        absolutePathToDataset = os.path.join(self.workDataDir, self.pathToDataset)
+        self.define_search_criteria(size=size)
+        searchMethod = self.search_criteria['searchMethod']
+        logging.debug("Looking for data files in: {}".format(absolutePathToDataset))
+        logging.debug("search method: {}".format(searchMethod))
+        if searchMethod == 'general':
+            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNames, **self.search_criteria)
+#            = findFileNames(absolutePathToFile)
+        elif searchMethod == 'allFilesInTimeRange':
+            getTimeFromNameFunc_ = getTimeFromName
+            logging.debug('searchmethod:')
+            logging.debug(self.timeRange)
+            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInTimeRange, timeRange=self.timeRange, getTimeFromNameFunc=getTimeFromNameFunc_, **self.search_criteria)
+        elif searchMethod == 'ClusterCAA':
+            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInInterval, interval=self.search_criteria['interval'], strings=self.instrumentation)
+#            fileNames = findFileNamesInInterval(absolutePathToFile, interval=interval, strings=self.instrumentation)
+        else:
+            raise Exception('unknown method for searching files')
+        numFiles = len(fileNames)
+        if numFiles == 1:
+            self.fileName = fileNames[0]
+            self.filePath = os.path.join(absolutePathToFile, self.fileName)
+            if not silence:
+                print(self.fileName)
+        elif numFiles == 0:
+            logging.warning("No file was found.")
+#            raise Exception('No file was found.')
+        elif numFiles > 1:
+            if searchMethod == 'allFilesInTimeRange':
+                paths = []
+                for fileName in fileNames:
+                    paths.append(os.path.join(absolutePathToFile, fileName))
+                self.filePaths = paths
+            else:
+                logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
+
+#            raise Exception('More than one files were found.')
+
+    def define_search_criteria(self, size='allSize'):
+        self.search_criteria = {}
         if self.dateTime:
             start = self.dateTime
             end = start + timedelta(seconds=1)
-        absolutePathToDataset = os.path.join(self.workDataDir, self.pathToDataset)
         criteria = []
         timeTag = None
         logging.debug("mission: {}".format(self.mission))
@@ -278,6 +317,7 @@ class DataFile(Instrumentation):
             else:
                 searchMethod = 'ClusterCAA'
                 interval = [start, end]
+                self.search_criteria.update({'interval': interval})
                 logging.debug('ClusterCAA searching criteria (instrumentation)')
                 logging.debug(self.instrumentation)
                 criteria.extend(self.instrumentation.copy()[1:])
@@ -294,41 +334,8 @@ class DataFile(Instrumentation):
         else:
             searchMethod = 'general'
             raise Exception('mission not defined!')
-        logging.debug("Looking for data files in: {}".format(absolutePathToDataset))
-        logging.debug("search method: {}".format(searchMethod))
-        if searchMethod == 'general':
-            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNames, strings=criteria, size=size, timeTag=timeTag)
-#            = findFileNames(absolutePathToFile)
-        elif searchMethod == 'allFilesInTimeRange':
-            getTimeFromNameFunc_ = getTimeFromName
-            logging.debug('searchmethod:')
-            logging.debug(self.timeRange)
-            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInTimeRange, timeRange=self.timeRange, getTimeFromNameFunc=getTimeFromNameFunc_, strings=criteria, size=size)
-        elif searchMethod == 'ClusterCAA':
-            fileNames, absolutePathToFile = self.findFileNamesUnderDataset(absolutePathToDataset, func=findFileNamesInInterval, interval=interval, strings=self.instrumentation)
-#            fileNames = findFileNamesInInterval(absolutePathToFile, interval=interval, strings=self.instrumentation)
-        else:
-            raise Exception('unknown method for searching files')
-        numFiles = len(fileNames)
-        if numFiles == 1:
-            self.fileName = fileNames[0]
-            self.filePath = os.path.join(absolutePathToFile, self.fileName)
-            if not silence:
-                print(self.fileName)
-        elif numFiles == 0:
-            logging.warning("No file was found.")
-#            raise Exception('No file was found.')
-        elif numFiles > 1:
-            if searchMethod == 'allFilesInTimeRange':
-                paths = []
-                for fileName in fileNames:
-                    paths.append(os.path.join(absolutePathToFile, fileName))
-                self.filePaths = paths
-            else:
-                logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
 
-#            raise Exception('More than one files were found.')
-
+        self.search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
 
     def findFileNamesUnderDataset(self, absolutePathToDataset, func, **para):
         fileNames = func(absolutePathToDataset, **para)
@@ -454,7 +461,7 @@ class Spacecraft:
                 if cleanData:
                     self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
-    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, saveDataFileInWorkDataDir=True):
+    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, saveDataFileInWorkDataDir=True, search_online=False):
         '''
         Purpose:
             This function is to load data.
@@ -540,6 +547,7 @@ class Spacecraft:
                             break
                     else:
                         dataset_file_time_gap = timedelta(days=1)
+                    logging.debug('dataset file time gap: {}'.format(dataset_file_time_gap))
                     if dataset_file_time_gap == timedelta(days=1):
                         beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
                         endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
@@ -566,17 +574,26 @@ class Spacecraft:
                                         destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
                                         dataFile = DataFile(filePath=destFilePath)
                                     break
-                        if not dataFile.filePath:
+                        if not dataFile.filePath and search_online:
                             cdaswsObj = cdasws.CdasWs()
                             if missionInfo[self.mission]['multispacecraftMission']:
                                 datasetId = '_'.join(splitedPathToDataset[1:]).upper()
                             else:
                                 datasetId = '_'.join(splitedPathToDataset).upper()
                             endt_ = endOfTheFilePeriod-timedelta(hours=12)
-                            logging.info('looking for files from CDAWeb...')
-                            status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod+timedelta(hours=2), endt_)
-                            if len(files) == 1:
-                                fileURL = files[0]['Name']
+                            logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(datasetId, beginOfTheFilePeriod, endOfTheFilePeriod))
+#                            status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod+timedelta(hours=2), endt_)
+                            try:
+                                status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod, endOfTheFilePeriod)
+                                allFileNames = [file_['Name'] for file_ in files]
+                                logging.info('files found from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endOfTheFilePeriod, allFileNames))
+                                file = None
+                                for file_ in files:
+                                    strings = dataFile.search_criteria['strings']
+                                    if all(string in file_['Name'] for string in strings):
+                                        file = file_
+                                        break
+                                fileURL = file['Name']
                                 o = urlparse(fileURL)
                                 filePathInDatabase = os.path.join(*o.path.split('/')[3:])
                                 destFilePath = os.path.join(workDataDir, filePathInDatabase)
@@ -585,11 +602,8 @@ class Spacecraft:
                                 urlretrieve(fileURL, destFilePath)
                                 logging.info('downloaded')
                                 dataFile = DataFile(filePath=destFilePath)
-                            elif len(files) == 0:
+                            except TypeError:
                                 pass
-                            else:
-                                allFileNames = [file_['Name'] for file_ in files]
-                                logging.warning('found more than 1 files from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endt_, allFileNames))
 
                     if not dataFile.filePath:
                         logging.info('data file not found')
@@ -933,7 +947,7 @@ def getTimeFromName(name):
     fmt = "%Y%m%d%H%M%S"
     return datetime.strptime(timeString, fmt)
 
-def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, strings=None, size='allSize', ext='.cdf'):
+def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, strings=None, size='allSize', ext='.cdf', **para):
     '''
     Purpose:
         This function is to find in the directory defined by <path> the names of those files whose data are in the timeRange. This function is designed for mms brst data file whose name is irregular in epoch division and only contains the start of the epoch.
@@ -993,7 +1007,7 @@ def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, str
     return foundFileNames
 
 ##
-def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf'):
+def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf', **para):
     '''
     Purpose:
         This function is to find in the directory defined by <path> the names of files which according to 

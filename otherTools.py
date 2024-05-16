@@ -5,6 +5,53 @@ __author__ = 'Yufei Zhou'
 from datetime import datetime
 import copy
 
+##
+class Directory:
+    def __init__(self, dic=None, lis=None):
+        '''
+        Parameters:
+            dic: or a dict, such as {'mms': {'mms1': {'fpi': {}}, 'mms2': {'fpi': {}, 'fgm': {}}}}
+            lis: list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']]
+        '''
+        def addInfoToDic(dic):
+            if isinstance(dic, dict):
+                dic.update({'__info': {'type': 'directory'}})
+                for key_, item_ in dic.items():
+                    if key_ != '__info':
+                        addInfoToDic(item_)
+        self.dic = dic
+        self.lis = lis
+
+    def generate_dic_from_lis(self):
+        '''
+        Purpose:
+            This function is to convert a list of list of str to a dict. Each leaf of the tree of the dictionary corresponds to an element in the list, in the form of [[key, key, key, ..., key, key], ...]
+        '''
+        assert self.dic is None and self.lis
+        dic = {}
+        ls = self.lis
+        for l in ls:
+            currentDic = dic
+            for key in l:
+                item = currentDic.get(key)
+                if item is not None:
+                    if isinstance(item, str):
+                        break
+                    elif isinstance(item, dict):
+                        previousDic = currentDic
+                        currentDic = item
+                else:
+                    currentDic[key] = {}
+                    previousDic = currentDic
+                    currentDic = previousDic[key]
+        self.dic = dic
+
+    def generate_lis_from_dic(self):
+        assert self.lis is None and self.dic
+        lis = dict2list(self.dic)
+        self.lis = [ll[:-1] for ll in lis]
+
+##
 def dict2list(dic, withLeafDict=False):
     '''
     Purpose:
@@ -17,7 +64,7 @@ def dict2list(dic, withLeafDict=False):
         for key, value in dic.items():
             listTilNow = listTilNow_.copy()
             listTilNow.append(key)
-            if isinstance(value, dict):
+            if isinstance(value, dict) and value:
                 f(value, listTilNow.copy(), finalList, withLeafDict=withLeafDict)
             else:
                 listTilNow.append(value)

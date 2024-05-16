@@ -384,6 +384,8 @@ class FileDownloader(threading.Thread):
                     self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
                     fInd, f = self.fInfo.get()
             except KeyboardInterrupt:
+                self.ftp.abort()
+                self.ftp.quit()
                 os.remove(dstName)
                 logging.info("File Removed: {}".format(dstName))
                 raise KeyboardInterrupt
@@ -725,9 +727,9 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
             **keywords: should contain ftp, verbose, facts, logFileDir, logFileHandle
 
         '''
-        ftpPath_ = '/'.join(para[:-1])
+        ftpPath_ = '/'.join(para[:-2])
         fileInfoDict = readFTPFileInfoRecursively(ftpPath=ftpPath_, **keywords)
-        para[-1][para[-3]] = {para[-2]: fileInfoDict}
+        para[-1][para[-3]] = fileInfoDict
         return None
 
     if logFileHandle is None:
@@ -811,18 +813,18 @@ def loadFileInfoDict(logFileDir=''):
 def readFileInfoRecursively(path='.', verbose=False, facts='stats'):
     '''
     Parameters:
-        path: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': 'fpi', 'mms2': 'fpi'}}
+        path: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': {'fpi': {}}, 'mms2': {'fpi': {}, 'fgm': {}}}}
     return:
-        fileInfoDict: a dict in the form of {'mms': {'mms1': {'fpi': {'brst': {'l2': {'2016': {'09': {filename: fileFact}}}}}}}}
+        fileInfoDict: a dict in the form of {'mms': {'mms1': {'fpi': {filename: {'__info': infoOfTheFilefilename}, '__info': infoOfTheDirectorybrst}, '__info': infoOfTheDirectoryfpi}, '__info': infoOfTheDirectorymms1}, '__info': infoOfTheDirectorymms}
     '''
     def func_base(para, verbose, facts):
-        path_ = os.path.join(*para[:-1])
+        path_ = os.path.join(*para[:-2])
         fileInfoDict = readFileInfoRecursively(path=path_, verbose=verbose, facts=facts)
-        para[-1][para[-3]] = {para[-2]: fileInfoDict}
+        para[-1][para[-3]] = fileInfoDict
         return None
     func = functools.partial(func_base, verbose=verbose, facts=facts)
 
-    if isinstance(path, str):
+    if isinstance(path, str): # this is the major branch of the function
         fileInfoDict = ot.DictTree()
         if verbose:
             print('reading {}'.format(path))

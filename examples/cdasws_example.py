@@ -13,8 +13,10 @@ for observatory in observatories:
 cdaswsObj.get_instrument_types()
 cdaswsObj.get_instrument_types(observatory='MMS1')
 cdaswsObj.get_instruments(observatory='MMS1')
-datasets = cdaswsObj.get_datasets(observatory='MMS1', instrument='SCM')
+datasets = cdaswsObj.get_datasets(observatory='MMS1', instrument='DIS')
 datasets
+for dataset in datasets:
+    print(dataset['Id'])
 dataset = datasets[-1]
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
@@ -35,7 +37,10 @@ epochObj = dat.Epochs(epochs=eventTime + np.array([-1, 1])*10**9 * 60*60*24, epo
 epochObj.dateTimeList
 status, data = cdaswsObj.get_data(dataset['Id'], variable_names, *epochObj.dateTimeList)
 status
-status, files = cdaswsObj.get_original_files(datasetId, [beginOfTheFilePeriod, endOfTheFilePeriod])
+
+datetimeRange = [datetime(2015, 10, 7), datetime(2015, 10, 7, 8)]
+status, files = cdaswsObj.get_original_files(dataset['Id'], *datetimeRange)
+status
 len(files)
 files[0]
 files

@@ -16,7 +16,7 @@ readFTP = True # if True, the program reads from ftp the list of the files you w
 
 missionName = 'mms'
 spacecraftNames = []
-mmsNumbers = [1,2]
+mmsNumbers = [1]
 for mmsNumber in mmsNumbers:
     spacecraftNames.append(missionName+str(mmsNumber))
 #for i in range(4):
@@ -24,10 +24,12 @@ for mmsNumber in mmsNumbers:
 #instrumentations = [['fpi', 'fast', 'l2', 'dis-moms'], ['fpi', 'brst', 'l2', 'dis-moms']]
 #instrumentations = [['mec', 'srvy', 'l2', 'epht89q'], ['mec', 'srvy', 'l2', 'epht89d']]
 #instrumentations = [['fgm', 'srvy', 'l2']]
-instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
-#instrumentations = [['fpi', 'fast', 'l2', 'dis-moms', '2016']]
+#instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
+instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
 dataNameDict = {missionName: {}}
-instrumentationsDict = ot.list2dict(instrumentations)
+directory = ot.Directory(lis=instrumentations)
+directory.generate_dic_from_lis()
+instrumentationsDict = directory.dic
 for spacecraftName in spacecraftNames:
     dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 #
@@ -41,4 +43,8 @@ for spacecraftName in spacecraftNames:
 #    dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 
 logFileDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/temp/downloadSPDF')
-downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource='from_log')
+if readFTP:
+    fileNamesSource = 'FTP'
+else:
+    fileNamesSource = 'from_log'
+downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource)
