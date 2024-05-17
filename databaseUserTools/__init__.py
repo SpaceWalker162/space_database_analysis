@@ -402,7 +402,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, datasets_variables_with_retrieving_names=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, search_online=False, fromFile=None, useMask=False, maskValue=-1.0*10**30):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -410,6 +410,7 @@ class Spacecraft:
             instrumentationRetrivingName: a string.
             datasetAndVariables: this parameter should not be used by user.
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
+            datasets_variables_with_retrieving_names: a dictionary of datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'MMS1_FGM_SRVY_L2': ['FGM', ('Epoch', 't'), ('mms1_fgm_srvy_l2_bvec_gse', 'B')], 'MMS2_FPI_FAST_L2_DIS-MOMS': ['fgmBrst', ('Epoch', 't'), ('mms2_fpi_fast_l2_dis-moms_density', 'n')]}. Please note that 'Epoch' and 'Btotal' are improvised. To retrieve data 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
             fromFile: to load data from a file, the file name is given by this parameter.
         Note:
             Necessary parameters include: <fromFile, [datetimeRange, <[<[instrumentation, variables], datasetsAndVariables>, instrumentationRetrivingName, variableRetrivingNames], instrumentationVariablesWithRetrivingName>]>
@@ -424,47 +425,20 @@ class Spacecraft:
             dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames)
             self.data.update({instrumentationRetrivingName: dataFromACdfFile})
         else:
-            if instrumentationVariablesWithRetrivingName:
-                # recursive branch of loadData
-                if isinstance(instrumentationVariablesWithRetrivingName, dict):
-                    instrumentationVariablesWithRetrivingNameList = ot.dict2list(instrumentationVariablesWithRetrivingName)
-                    logging.debug(instrumentationVariablesWithRetrivingNameList)
-                if isinstance(instrumentationVariablesWithRetrivingName, list):
-                    instrumentationVariablesWithRetrivingNameList = instrumentationVariablesWithRetrivingName
-                for ins in instrumentationVariablesWithRetrivingNameList:
-                    dataset = ins[:-1]
-                    logging.debug(dataset)
-                    instrumentationRetrivingName = ins[-1][0]
-                    variables = [varPair[0] for varPair in ins[-1][1:]]
-                    variableRetrivingNames = [varPair[1] for varPair in ins[-1][1:]]
-                    datasetAndVariables = dataset
-                    datasetAndVariables.append(variables)
-                    self.loadData(datetimeRange=datetimeRange, instrumentationRetrivingName=instrumentationRetrivingName, variableRetrivingNames=variableRetrivingNames, datasetAndVariables=datasetAndVariables, cleanData=cleanData, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
-            else:
-                # major branch of loadData
-                if variablesWithRetrivingNames:
-                    variables = [tu[0] for tu in variablesWithRetrivingNames]
-                else:
-                    variableRetrivingNames = variableRetrivingNames.copy()
-                    if datasetAndVariables is not None:
-                        variables = datasetAndVariables[-1]
-                    variablesWithRetrivingNames = list(zip(variables, variableRetrivingNames))
-                if datasetAndVariables is None:
-                    if isinstance(instrumentation, str):
-                        instrumentation = [instrumentation]
-                    if self.mission in multispacecraftMissions:
-                        datasetAndVariables = [self.mission, self.name, *instrumentation, variables]
-                    else:
-                        datasetAndVariables = [self.name, *instrumentation, variables]
-    #            else:
-    #                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
-                datasetsAndVariables = [datasetAndVariables]
-                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, workDataDirsBak=self.workDataDirsBak, copy_if_not_exist=copy_if_not_exist)
-                logging.info(data_[0].keys())
-                dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
-                self.data.update({instrumentationRetrivingName: dataInDict})
-                if cleanData:
-                    self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
+            assert datasets_variables_with_retrieving_names
+            datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak)
+            for datasetID, item in datasets_variables_with_retrieving_names.items():
+                datasetRetrievingName = item[0]
+                variableNamesAndRetrievingNames = item[1:]
+                variableNames = [varRet[0] for varRet in variableNamesAndRetrievingNames]
+                dataset_info = datasets_info[datasetID]
+                dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
+                dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                for varName, retName in variableNamesAndRetrievingNames:
+                    dataset.data[retName] = dataset.data.pop(varName)
+                self.data.update({datasetRetrievingName: dataset.data})
+            if cleanData:
+                self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
     def readData(self, workDataDir, datasetsAndVariables, datetimeRange, workDataDirsBak=None, copy_if_not_exist=True, search_online=False):
         '''
@@ -638,10 +612,11 @@ class Dataset:
         self.databaseBakPaths= databaseBakPaths
         if dataset_info:
             self.datasetID = dataset_info['Id']
+            self.dataset_info = dataset_info
         else:
             self.datasetID = datasetID
             datasets_info = loadDatasets_info(self.databasePath, self.databaseBakPaths)
-            self.datasetID = datasets_info[datasetID]
+            self.dataset_info = datasets_info[datasetID]
 
         dataset_file_time_gap_str = dataset_info.get('dataset_file_time_gap')
         if dataset_file_time_gap_str:
@@ -663,17 +638,17 @@ class Dataset:
     def _get_file_time_limits(self, dateTime):
         if isinstance(self.dataset_file_time_gap, timedelta):
             if self.dataset_file_time_gap == timedelta(days=1):
-                beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
-                endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
+                beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day)
+                endOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day+1)
             elif self.dataset_file_time_gap < timedelta(days=1):
-                beginOfTheDay = datetime(start_.year, start_.month, start_.day)
-                completePeriodBefore = (start_ - beginOfTheDay)//self.dataset_file_time_gap
+                beginOfTheDay = datetime(dateTime.year, dateTime.month, dateTime.day)
+                completePeriodBefore = (dateTime - beginOfTheDay)//self.dataset_file_time_gap
                 beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * self.dataset_file_time_gap
                 endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*self.dataset_file_time_gap 
         elif isinstance(self.dataset_file_time_gap, list):
             assert self.dataset_file_time_gap[0] == 'month'
-            beginOfTheFilePeriod = datetime(start_.year, start_.month, 1)
-            endOfTheFilePeriod = datetime(start_.year, start_.month+len(self.dataset_file_time_gap), 1)
+            beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, 1)
+            endOfTheFilePeriod = datetime(dateTime.year, dateTime.month+len(self.dataset_file_time_gap), 1)
         return beginOfTheFilePeriod, endOfTheFilePeriod
 
     def _define_search_criteria(self, beginOfTheFilePeriod=None, endOfTheFilePeriod=None, dateTime=None, size='allSize', **para):
@@ -768,13 +743,18 @@ class Dataset:
     def _get_file_path_from_multiple_resources(self, beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=True, search_online=False, **para):
         search_func = findFileNames
         search_criteria = self._define_search_criteria(self, beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
-        filePath = self._get_file_path(os.path.join(self.databasePath, self.dataset_info['dataset_path']), search_func, **search_criteria)
+        datasetPathInDatabase = self.dataset_info.get('dataset_path')
+        if not datasetPathInDatabase:
+            datasetPathInDatabase = os.path.join('_'.split(self.datasetID.lower()))
+        datasetAbsolutePath = os.path.join(self.databasePath, datasetPathInDatabase)
+        filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
         if filePath:
             pass
         else:
             if self.databaseBakPaths:
                 for databasePathBak in self.databaseBakPaths:
-                    filePath = self._get_file_path(os.path.join(databasePathBak, self.dataset_info['dataset_path']), search_func, **search_criteria)
+                    datasetAbsolutePath = os.path.join(databasePathBak, datasetPathInDatabase)
+                    filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
                     if filePath:
                         if copy_if_not_exist:
                             destFilePath = workDataDirCopy(filePath, self.databasePath, databasePathBak)
@@ -782,7 +762,7 @@ class Dataset:
                         break
             if not filePath and search_online:
                 cdaswsObj = cdasws.CdasWs()
-                logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(datasetID, beginOfTheFilePeriod, endOfTheFilePeriod))
+                logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(self.datasetID, beginOfTheFilePeriod, endOfTheFilePeriod))
                 try:
                     status, files = cdaswsObj.get_original_files(self.datasetID, beginOfTheFilePeriod, endOfTheFilePeriod)
                     allFileNames = [file_['Name'] for file_ in files]
@@ -820,7 +800,7 @@ class Dataset:
                 datetimeRange = [start_, end]
             else:
                 datetimeRange = [start_, endOfTheFilePeriod]
-            filePath = self._get_file_path_from_multiple_resources(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online, **para)
+            filePath = self._get_file_path_from_multiple_resources(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
             cdfFile = cdflib.CDF(filePath)
             if not filePath:
                 logging.info('data file not found')

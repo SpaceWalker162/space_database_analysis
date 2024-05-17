@@ -4,6 +4,26 @@ import subprocess
 import logging
 
 
+class TexFile:
+    def __init__(self, filePath=None, content=None):
+        if filePath:
+            self.filePath = filePath
+            with open(self.filePath, 'r') as f:
+                texContent = f.read()
+            self.content = texContent
+        elif content:
+            self.content = content
+        if self.content:
+            documentStartInd = self.content.find(r'\begin{document}')
+            self.preamble = self.content[:documentStartInd]
+            self.document_content = self.content[documentStartInd:]
+
+    def extract_environement(self, environmentName=None):
+        return extract_environement_from_tex(string=self.document_content, environmentName=environmentName)
+
+    def extract_macro(self, macroName=None):
+        return extract_macro_from_tex(self.document_content, macroName=macroName)
+
 def makeDelimiterPairDict(delimiterPairs):
     dic = {}
     for pair in delimiterPairs:
