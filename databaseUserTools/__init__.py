@@ -30,7 +30,7 @@ from wolframclient.evaluation import WolframLanguageSession
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 import space_database_analysis.dataAnalysisTools as dat
-from space_database_analysis.databaseTools import *
+#from space_database_analysis.databaseTools import *
 
 '''
 <A, B> means either A or B
@@ -78,6 +78,9 @@ missionInfo = {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
         'cassini': {
+            'epochType': 'CDF_EPOCH',
+            'multispacecraftMission': False},
+        'omni': {
             'epochType': 'CDF_EPOCH',
             'multispacecraftMission': False},
         }
@@ -172,10 +175,11 @@ class Instrumentation:
         self.epochType = epochType
 
 
+
 class DataFile(Instrumentation):
     '''
     '''
-    def __init__(self, mission=None, spacecraft=None, instrumentation=None, instrumentationPath=None, pathToDataset=None, splitedPathToDataset=None, dateTime=None, timeRange=None, filePeriodRange=None, dataset_file_time_gap=None, fileName=None, instrumentationObj=None, cdfFile=None, workDataDir=None, fileSize='allSize', epochType='CDF_EPOCH', silence=True, filePath=None, filePaths=[], defineCDFFileQ=True):
+    def __init__(self, mission=None, spacecraft=None, instrumentation=None, instrumentationPath=None, pathToDataset=None, splitedPathToDataset=None, datasetID=None, dateTime=None, timeRange=None, filePeriodRange=None, dataset_file_time_gap=None, fileName=None, instrumentationObj=None, cdfFile=None, workDataDir=None, fileSize='allSize', epochType='CDF_EPOCH', silence=True, filePath=None, filePaths=[], defineCDFFileQ=True):
         '''
         Parameter:
             workDataDir: the path to the directory of the working database
@@ -380,7 +384,8 @@ class Spacecraft:
         self.name = name
         self.instrumentationAll = instrumentationAll
         if epochType is None:
-           epochType = missionInfo[self.mission]['epochType']
+            pass
+#           epochType = missionInfo[self.mission]['epochType']
         self.epochType = epochType
         if data is None:
             self.data = {}
@@ -397,7 +402,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, saveDataFileInWorkDataDir=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, fromFile=None, useMask=False, maskValue=-1.0*10**30):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -416,7 +421,7 @@ class Spacecraft:
                 variableNames = variablesWithRetrivingNames
             else:
                 variableNames = None
-            dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames, epochType=self.epochType)
+            dataFromACdfFile = readDataFromACdfFile(cdfFile, variableNames)
             self.data.update({instrumentationRetrivingName: dataFromACdfFile})
         else:
             if instrumentationVariablesWithRetrivingName:
@@ -454,14 +459,14 @@ class Spacecraft:
     #            else:
     #                variablesWithRetrivingNames = list(zip(datasetAndVariables[-1], variableRetrivingNames))
                 datasetsAndVariables = [datasetAndVariables]
-                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, epochType=self.epochType, workDataDirsBak=self.workDataDirsBak, saveDataFileInWorkDataDir=saveDataFileInWorkDataDir)
+                data_ = self.readData(self.workDataDir, datasetsAndVariables, datetimeRange=datetimeRange, workDataDirsBak=self.workDataDirsBak, copy_if_not_exist=copy_if_not_exist)
                 logging.info(data_[0].keys())
                 dataInDict = dict([(varRetName, data_[0][varName]) for varName, varRetName in variablesWithRetrivingNames])
                 self.data.update({instrumentationRetrivingName: dataInDict})
                 if cleanData:
                     self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
-    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EPOCH', workDataDirsBak=None, saveDataFileInWorkDataDir=True, search_online=False):
+    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, workDataDirsBak=None, copy_if_not_exist=True, search_online=False):
         '''
         Purpose:
             This function is to load data.
@@ -481,6 +486,9 @@ class Spacecraft:
         elif isinstance(datasetsAndVariables, list):
             datasetsAndVariablesList = datasetsAndVariables
         variablesAllDataset = []
+
+        # load dataset info
+        datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak)
         for datasetAndVariables in datasetsAndVariablesList:
             logging.info('finding files for dataset and variables: ')
             logging.info(datasetAndVariables)
@@ -488,6 +496,8 @@ class Spacecraft:
             variableNames = datasetAndVariables[-1]
             start_ = start
             variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
+            datasetID = '_'.join(splitedPathToDataset).upper()
+            dataset_info = datasets_info[datasetID]
             variablesInADatasetIndependantOnTime = []
             if 'brst' in splitedPathToDataset:
                 allowedTimeExtension = timedelta(seconds=600)
@@ -506,7 +516,7 @@ class Spacecraft:
                                 if workFilePath in workDataFile.filePaths:
                                     desiredDataPaths.append(workFilePath)
                                 else:
-                                    if saveDataFileInWorkDataDir:
+                                    if copy_if_not_exist:
                                         destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
                                         desiredDataPaths.append(destFilePath)
                                     else:
@@ -516,112 +526,15 @@ class Spacecraft:
                 for fileInd, cdfFile in enumerate(dataFile.cdfFiles):
                     logging.info('reading data file: {}'.format(dataFile.filePaths[fileInd]))
                     logging.info('datetimeRange: {}'.format(datetimeRange))
-                    dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange, epochType=epochType)
+                    dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
                     logging.info('reading data file done: {}'.format(dataFile.filePath))
                     variablesInADatasetOverDatetimeRange.append(dataMajor)
                     variablesInADatasetIndependantOnTime.append(dataAux)
             else:
                 logging.debug('not in brst')
-#                dataset = Dataset(database=workDataDir, datasetId, timeRange)
-#                dataset.findDataFiles()
-#                dataset.file_names
-#                dataset.data_files
-#                for data_file in dataset.data_files:
-#                    if data_file.filePath:
-#                        pass
-#                    elif workDataDirsBak:
-#                        for workDataDirBak in workDataDirsBak:
-#                            dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
-#                            if dataFile.filePath:
-#                                if saveDataFileInWorkDataDir:
-#                                    filePath = dataFile.filePath
-#
-#                                    destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
-#                                    dataFile = DataFile(filePath=destFilePath)
-#                                break
+                dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
+                dataset.load_data(variableNames=None, datetimeRange=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
 
-                while start_ < end:
-                    for possible_dataset in missionInfo[self.mission]['dataset']:
-                        if all([flag in splitedPathToDataset for flag in possible_dataset['dataset_flags']]):
-                            dataset_file_time_gap = possible_dataset.get('dataset_file_time_gap')
-                            break
-                    else:
-                        dataset_file_time_gap = timedelta(days=1)
-                    logging.debug('dataset file time gap: {}'.format(dataset_file_time_gap))
-                    if dataset_file_time_gap == timedelta(days=1):
-                        beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
-                        endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
-                    elif dataset_file_time_gap < timedelta(days=1):
-                        beginOfTheDay = datetime(start_.year, start_.month, start_.day)
-                        completePeriodBefore = (start_ - beginOfTheDay)//dataset_file_time_gap
-                        beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * dataset_file_time_gap
-                        endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*dataset_file_time_gap 
-                    if endOfTheFilePeriod >= end:
-                        datetimeRange = [start_, end]
-                    else:
-                        datetimeRange = [start_, endOfTheFilePeriod]
-                    dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod])
-                    if dataFile.filePath:
-                        pass
-                    else:
-                        if workDataDirsBak:
-                            for workDataDirBak in workDataDirsBak:
-                                dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
-                                if dataFile.filePath:
-                                    if saveDataFileInWorkDataDir:
-                                        filePath = dataFile.filePath
-
-                                        destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
-                                        dataFile = DataFile(filePath=destFilePath)
-                                    break
-                        if not dataFile.filePath and search_online:
-                            cdaswsObj = cdasws.CdasWs()
-                            if missionInfo[self.mission]['multispacecraftMission']:
-                                datasetId = '_'.join(splitedPathToDataset[1:]).upper()
-                            else:
-                                datasetId = '_'.join(splitedPathToDataset).upper()
-                            endt_ = endOfTheFilePeriod-timedelta(hours=12)
-                            logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(datasetId, beginOfTheFilePeriod, endOfTheFilePeriod))
-#                            status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod+timedelta(hours=2), endt_)
-                            try:
-                                status, files = cdaswsObj.get_original_files(datasetId, beginOfTheFilePeriod, endOfTheFilePeriod)
-                                allFileNames = [file_['Name'] for file_ in files]
-                                logging.info('files found from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endOfTheFilePeriod, allFileNames))
-                                file = None
-                                for file_ in files:
-                                    strings = dataFile.search_criteria['strings']
-                                    if all(string in file_['Name'] for string in strings):
-                                        file = file_
-                                        break
-                                fileURL = file['Name']
-                                o = urlparse(fileURL)
-                                filePathInDatabase = os.path.join(*o.path.split('/')[3:])
-                                destFilePath = os.path.join(workDataDir, filePathInDatabase)
-                                os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-                                logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
-                                urlretrieve(fileURL, destFilePath)
-                                logging.info('downloaded')
-                                dataFile = DataFile(filePath=destFilePath)
-                            except TypeError:
-                                pass
-
-                    if not dataFile.filePath:
-                        logging.info('data file not found')
-                    else:
-                        logging.info('reading data file: {}'.format(dataFile.filePath))
-                        logging.info('datetimeRange: {}'.format(datetimeRange))
-                        dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
-                        logging.info('reading data file done: {}'.format(dataFile.filePath))
-                        variablesInADatasetOverDatetimeRange.append(dataMajor)
-                        variablesInADatasetIndependantOnTime.append(dataAux)
-                    start_ = endOfTheFilePeriod
-            variables = {}
-            for var in variablesInADatasetOverDatetimeRange[0].keys():
-                variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
-            for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
-                logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
-                for key in variablesInADatasetIndependantOnTime[fileInd].keys():
-                    assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
             variables.update(variablesInADatasetIndependantOnTime[0])
     #        for indOfVariable in range(len(variablesInADatasetOverDatetimeRange[0])):
     #            variables.append(np.concatenate([variables[indOfVariable] for variables in variablesInADatasetOverDatetimeRange], axis=0))
@@ -700,57 +613,237 @@ class Spacecraft:
                     pass
                 dic[key] = varData
 
+
+def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
+    database = dbt.Database([databasePath])
+    if database.datasets_info_paths:
+        with open(database.datasets_info_paths[0], 'r') as f:
+            datasets_info = json.load(f)
+    elif databaseBakPaths:
+        database = dbt.Database(databaseBakPaths)
+        if copy_if_not_exist:
+            databasePathBak = os.path.split(database.datasets_info_paths[0])[0]
+            destFilePath = workDataDirCopy(database.datasets_info_paths[0], databasePath, databasePathBak)
+            with open(destFilePath, 'r') as f:
+                datasets_info = json.load(f)
+        else:
+            with open(database.datasets_info_paths[0], 'r') as f:
+                datasets_info = json.load(f)
+    return datasets_info
+
+
 class Dataset:
-    def __init__(self, datasetId, timeRange):
-        self.datasetId = datasetId
-        self.timeRange = timeRange
+    def __init__(self, datasetID=None, dataset_info=None, databasePath=None, databaseBakPaths=None):
+        self.databasePath = databasePath
+        self.databaseBakPaths= databaseBakPaths
+        if dataset_info:
+            self.datasetID = dataset_info['Id']
+        else:
+            self.datasetID = datasetID
+            datasets_info = loadDatasets_info(self.databasePath, self.databaseBakPaths)
+            self.datasetID = datasets_info[datasetID]
+
+        dataset_file_time_gap_str = dataset_info.get('dataset_file_time_gap')
+        if dataset_file_time_gap_str:
+            num, unit = ' '.split(dataset_file_time_gap_str)
+            num = int(num)
+            if unit == 'hour':
+                unit = timedelta(seconds=3600)
+            elif unit == 'day':
+                unit = timedelta(days=1)
+            elif unit == 'month':
+                unit = ['month']
+            dataset_file_time_gap = num * unit
+
+        else:
+            dataset_file_time_gap = timedelta(days=1)
+        self.dataset_file_time_gap = dataset_file_time_gap
+        logging.debug('dataset file time gap: {}'.format(dataset_file_time_gap))
+
+    def _get_file_time_limits(self, dateTime):
+        if isinstance(self.dataset_file_time_gap, timedelta):
+            if self.dataset_file_time_gap == timedelta(days=1):
+                beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
+                endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
+            elif self.dataset_file_time_gap < timedelta(days=1):
+                beginOfTheDay = datetime(start_.year, start_.month, start_.day)
+                completePeriodBefore = (start_ - beginOfTheDay)//self.dataset_file_time_gap
+                beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * self.dataset_file_time_gap
+                endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*self.dataset_file_time_gap 
+        elif isinstance(self.dataset_file_time_gap, list):
+            assert self.dataset_file_time_gap[0] == 'month'
+            beginOfTheFilePeriod = datetime(start_.year, start_.month, 1)
+            endOfTheFilePeriod = datetime(start_.year, start_.month+len(self.dataset_file_time_gap), 1)
+        return beginOfTheFilePeriod, endOfTheFilePeriod
+
+    def _define_search_criteria(self, beginOfTheFilePeriod=None, endOfTheFilePeriod=None, dateTime=None, size='allSize', **para):
+        search_criteria = {}
+        if dateTime:
+            start = dateTime
+            end = start + timedelta(seconds=1)
+        elif beginOfTheFilePeriod:
+            start = beginOfTheFilePeriod
+            end = start + timedelta(seconds=1)
+        criteria = []
+        timeTag = None
+        logging.debug("mission: {}".format(self.mission))
+        if self.mission == 'mms':
+            if 'brst' in self.instrumentationPath:
+                searchMethod = 'allFilesInTimeRange'
+            else:
+                searchMethod = 'general'
+                criteria.extend(self.instrumentation.copy())
+                if self.dataset_file_time_gap is not None:
+                    if self.dataset_file_time_gap < timedelta(days=1):
+                        criteria.append(self.filePeriodRange[0].strftime("%Y%m%d%H"))
+                    elif self.dataset_file_time_gap == timedelta(days=1):
+                        criteria.append(start.strftime("%Y%m%d"))
+        elif self.mission == 'cluster':
+            if 'cis-hia' in self.instrumentationPath:
+                searchMethod = 'general'
+                infoList_ = self.instrumentation[1].split('_')
+                mode = infoList_[2][:-4]
+                sensitivity = infoList_[3][0]
+                dataName_ = infoList_[4]
+                if dataName_ == 'phasespacedens':
+                    dataNameAbb = 'psd'
+                elif dataName_ == 'diffenergyflux':
+                    dataNameAbb = 'pef'
+                restructedStrCriterion = '_'.join(['cis-hia', sensitivity+'s', mode, 'ions', dataNameAbb])
+                criteria.append(restructedStrCriterion)
+                criteria.append('v2022')
+                criteria.append(start.strftime("%Y%m%d"))
+            else:
+                searchMethod = 'ClusterCAA'
+                interval = [start, end]
+                search_criteria.update({'interval': interval})
+                logging.debug('ClusterCAA searching criteria (instrumentation)')
+                logging.debug(self.instrumentation)
+                criteria.extend(self.instrumentation.copy()[1:])
+                criteria.append(start.strftime("%Y%m%d"))
+        elif self.mission == 'ace':
+            searchMethod = 'general'
+            criteria.append(start.strftime("%Y%m%d"))
+        elif self.mission == 'cassini':
+            searchMethod = 'general'
+            if 'CO-E_SW_J_S-MAG-4-SUMM-1MINAVG-V2.0' in self.instrumentation:
+                criteria.append(start.strftime("%Y"))
+            else:
+                criteria.append(start.strftime("%Y%m%d"))
+        else:
+            searchMethod = 'general'
+            raise Exception('mission not defined!')
+
+        search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
+        return search_criteria
+
+    def _get_file_path(self, absolutePathToDataset, dateTime=None, search_func=None, **search_criteria):
+        '''
+        Parameters:
+            search_func: a function having input [directory, **search_criteria] to search for the file in the directory meeting criteria defined by search_criteria.
+        '''
+        fileNames = search_func(absolutePathToDataset, **search_criteria)
+        absolutePathToFile = absolutePathToDataset
+        if len(fileNames) == 0:
+            absolutePathToDatasetYear = os.path.join(absolutePathToDataset, dateTime.strftime('%Y'))
+            absolutePathToFile = absolutePathToDatasetYear
+            logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYear))
+            fileNames = search_func(absolutePathToDatasetYear, **search_criteria)
+            if len(fileNames) == 0:
+                absolutePathToDatasetYearMonth = os.path.join(absolutePathToDatasetYear, dateTime.strftime('%m'))
+                absolutePathToFile = absolutePathToDatasetYearMonth
+                logging.debug("Not found. Looking for data files in: {}".format(absolutePathToDatasetYearMonth))
+                fileNames = search_func(absolutePathToDatasetYearMonth, **search_criteria)
+        filePaths = [os.path.join(absolutePathToFile, fileName) for fileName in fileNames]
+        numFiles = len(filePaths)
+        filePath = None
+        if numFiles == 1:
+            filePath = filePaths[0]
+        elif numFiles == 0:
+            logging.warning("No file was found.")
+        elif numFiles > 1:
+            logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
+        return filePath
+
+    def _get_file_path_from_multiple_resources(self, beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=True, search_online=False, **para):
+        search_func = findFileNames
+        search_criteria = self._define_search_criteria(self, beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
+        filePath = self._get_file_path(os.path.join(self.databasePath, self.dataset_info['dataset_path']), search_func, **search_criteria)
+        if filePath:
+            pass
+        else:
+            if self.databaseBakPaths:
+                for databasePathBak in self.databaseBakPaths:
+                    filePath = self._get_file_path(os.path.join(databasePathBak, self.dataset_info['dataset_path']), search_func, **search_criteria)
+                    if filePath:
+                        if copy_if_not_exist:
+                            destFilePath = workDataDirCopy(filePath, self.databasePath, databasePathBak)
+                            filePath = destFilePath
+                        break
+            if not filePath and search_online:
+                cdaswsObj = cdasws.CdasWs()
+                logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(datasetID, beginOfTheFilePeriod, endOfTheFilePeriod))
+                try:
+                    status, files = cdaswsObj.get_original_files(self.datasetID, beginOfTheFilePeriod, endOfTheFilePeriod)
+                    allFileNames = [file_['Name'] for file_ in files]
+                    logging.info('files found from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endOfTheFilePeriod, allFileNames))
+                    file = None
+                    for file_ in files:
+                        strings = search_criteria['strings']
+                        if all(string in file_['Name'] for string in strings):
+                            file = file_
+                            break
+                    fileURL = file['Name']
+                    o = urlparse(fileURL)
+                    filePathInDatabase = os.path.join(*o.path.split('/')[3:])
+                    destFilePath = os.path.join(self.databasePath, filePathInDatabase)
+                    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+                    logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
+                    urlretrieve(fileURL, destFilePath)
+                    logging.info('downloaded')
+                    filePath = destFilePath
+                except TypeError:
+                    pass
+        return filePath
+
+    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False):
+        self.datetimeRange = datetimeRange
+        self.variables_to_load = variableNames
+        start, end = self.datetimeRange
+
+        start_ = start
+        variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
+        variablesInADatasetIndependantOnTime = []
+        while start_ < end:
+            beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(start_)
+            if endOfTheFilePeriod >= end:
+                datetimeRange = [start_, end]
+            else:
+                datetimeRange = [start_, endOfTheFilePeriod]
+            filePath = self._get_file_path_from_multiple_resources(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online, **para)
+            cdfFile = cdflib.CDF(filePath)
+            if not filePath:
+                logging.info('data file not found')
+            else:
+                logging.info('reading data file: {}'.format(filePath))
+                logging.info('datetimeRange: {}'.format(datetimeRange))
+                dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
+                logging.info('reading data file done: {}'.format(filePath))
+                variablesInADatasetOverDatetimeRange.append(dataMajor)
+                variablesInADatasetIndependantOnTime.append(dataAux)
+            start_ = endOfTheFilePeriod
+        variables = {}
+        for var in variablesInADatasetOverDatetimeRange[0].keys():
+            variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+        for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
+            logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
+            for key in variablesInADatasetIndependantOnTime[fileInd].keys():
+                assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+        variables.update(variablesInADatasetIndependantOnTime[0])
+        self.data = variables
 
     def findDataFiles(self):
-        if 'brst' not in self.datasetId.lower():
-            logging.debug('not in brst')
-            temporal_coverage_per_file = dataset_info['temporal_coverage_per_file']
-            while start_ < end:
-                for possible_dataset in missionInfo[self.mission]['dataset']:
-                    if all([flag in splitedPathToDataset for flag in possible_dataset['dataset_flags']]):
-                        dataset_file_time_gap = possible_dataset.get('dataset_file_time_gap')
-                        break
-                else:
-                    dataset_file_time_gap = timedelta(days=1)
-                if dataset_file_time_gap == timedelta(days=1):
-                    beginOfTheFilePeriod = datetime(start_.year, start_.month, start_.day)
-                    endOfTheFilePeriod = datetime(start_.year, start_.month, start_.day+1)
-                elif dataset_file_time_gap < timedelta(days=1):
-                    beginOfTheDay = datetime(start_.year, start_.month, start_.day)
-                    completePeriodBefore = (start_ - beginOfTheDay)//dataset_file_time_gap
-                    beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * dataset_file_time_gap
-                    endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*dataset_file_time_gap 
-                if endOfTheFilePeriod >= end:
-                    datetimeRange = [start_, end]
-                else:
-                    datetimeRange = [start_, endOfTheFilePeriod]
-                dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod])
-                if dataFile.filePath:
-                    pass
-                elif workDataDirsBak:
-                    for workDataDirBak in workDataDirsBak:
-                        dataFile = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, dateTime=start_, filePeriodRange=[beginOfTheFilePeriod, endOfTheFilePeriod], defineCDFFileQ=False)
-                        if dataFile.filePath:
-                            if saveDataFileInWorkDataDir:
-                                filePath = dataFile.filePath
-
-                                destFilePath = workDataDirCopy(filePath, workDataDir, workDataDirBak)
-                                dataFile = DataFile(filePath=destFilePath)
-                            break
-                if not dataFile.filePath:
-                    logging.info('data file not found')
-                else:
-                    logging.info('reading data file: {}'.format(dataFile.filePath))
-                    logging.info('datetimeRange: {}'.format(datetimeRange))
-                    dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
-                    logging.info('reading data file done: {}'.format(dataFile.filePath))
-                    variablesInADatasetOverDatetimeRange.append(dataMajor)
-                    variablesInADatasetIndependantOnTime.append(dataAux)
-                start_ = endOfTheFilePeriod
+        pass
 
 class CelestialReferenceFrames:
     def __init__(self):
@@ -1275,7 +1368,7 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
 #            logging.info(dataFile.cdfFile)
             logging.info('reading data file: {}'.format(dataFile.filePath))
             logging.info('datetimeRange: {}'.format(datetimeRange))
-            dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange, epochType=epochType)
+            dataMajor, dataAux = readDataFromACdfFile(dataFile.cdfFile, variableNames, datetimeRange)
             logging.info('reading data file done: {}'.format(dataFile.filePath))
             variablesInADatasetOverDatetimeRange.append(dataMajor)
             variablesInADatasetIndependantOnTime.append(dataAux)
@@ -1294,13 +1387,12 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
     return variablesAllDataset
 
 ##
-def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType='CDF_EPOCH'):
+def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None):
     if variables:
         varInfo, varInfoDict = readCDFInfo(cdfFile)
         epochDataInd = 0 # in most cases, epoch is the first zVariable
         dataMajor = {}
         dataAux = {} # data not dependant on epoch
-        timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
         for var in variables:
             pad = cdfFile.varinq(var).Pad
             logging.debug('var: ' + var)
@@ -1309,14 +1401,17 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None, epochType=
             logging.info('depend0: '+ str(depend0))
             if depend0 is None:
                 if varInfo[epochDataInd]['varInfo'].Variable == var:
-                    pass
+                    epochDataName = var
                 else:
                     majorData = False
             else:
                 assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
+                epochDataName = depend0
             logging.info('isMajorData: '+str(majorData))
             if majorData:
-                if timeRange is not None:
+                if datetimeRange is not None:
+                    epochType = cdfFile.varinq(epochDataName).Data_Type_Description
+                    timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
                     varData = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
                     if np.issubdtype(varData.dtype, np.number):
                         varData = np.ma.masked_equal(varData, pad)

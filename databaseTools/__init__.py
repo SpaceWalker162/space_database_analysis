@@ -4,13 +4,14 @@ import tarfile
 from ftplib import FTP_TLS
 import numpy as np
 import os
-from datetime import datetime
+import json
+import cdasws
+from datetime import datetime, timedelta
 import urllib3
 import time
 import space_database_analysis.otherTools as ot
 import copy
 import ast
-import cdflib
 #import progressbar
 import functools
 import threading
@@ -23,6 +24,7 @@ import queue
 
 __readftpFileNameLog ='readftpFileName.log'
 __readFTPDirLog = 'readFTPDir.log'
+__database_dataset_info_file_name = 'datasets_info'
 ## run this file under the destination directory 
 
 dataTypeTransformationDict_PDS = {
@@ -31,10 +33,16 @@ dataTypeTransformationDict_PDS = {
         }
 
 
+
 class Database:
 
     def __init__(self, databasePaths=[]):
         self.paths = databasePaths
+        self.datasets_info_paths = []
+        for path in self.paths:
+            dataset_info_file_path = os.path.join(path, __database_dataset_info_file_name)
+            if os.path.exists(dataset_info_file_path):
+                self.datasets_info_paths.append(dataset_info_file_path)
 
 
     def removeOutdatedFiles(self):
@@ -110,6 +118,57 @@ class Database:
         return outdatedFilePaths
 
 
+    def make_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name='additional_datasets_info', get_info_from_CDAWeb=False, dry_run=False):
+        '''
+        Purpose:
+            Create a file storing support information about the datasets in the database
+        Parameters:
+            get_info_from_CDAWeb: if False, the function will get info from a previously saved file.
+
+        '''
+        def add_info_to_dic(dataset):
+            dID = dataset['Id']
+            if dID[:3] == 'MMS':
+                if 'FPI_FAST' in dID:
+                    dataset.update({'dataset_file_time_gap': '2 hour'})
+                if 'EDP_FAST' in dID:
+                    dataset.update({'dataset_file_time_gap': '1 day'})
+                if 'EDP_SLOW' in dID:
+                    dataset.update({'dataset_file_time_gap': '1 day'})
+            elif dID[:4] == 'OMNI':
+                dataset.update({'dataset_file_time_gap': '1 month'})
+
+        datasets_dic = {}
+        if get_info_from_CDAWeb:
+            cdaswsObj = cdasws.CdasWs()
+            datasets = cdaswsObj.get_datasets()
+            for dataset in datasets:
+                datasets_dic[dataset['Id']] = dataset
+        else:
+            for path in self.paths:
+                save_path = os.path.join(path, save_name)
+                if os.path.exists(save_path):
+                    with open(save_path, 'r') as f:
+                        datasets_dic = json.load(f)
+                    break
+        for path in self.paths:
+            add_info_file_path = os.path.join(path, add_info_file_name)
+            if os.path.exists(add_info_file_path):
+                with open(add_info_file_path, 'r') as f:
+                    add_info = json.load(f)
+                break
+        else:
+            add_info = {}
+        for key, dataset in datasets_dic.items():
+            if key in add_info:
+                dataset.update(add_info[key])
+            add_info_to_dic(dataset)
+        if dry_run:
+            return datasets_dic
+        for path in self.paths:
+            save_path = os.path.join(path, save_name)
+            with open(save_path, 'w') as f:
+                json.dump(datasets_dic, f)
 
 
 def dirsInit(path, dictOfDirs):

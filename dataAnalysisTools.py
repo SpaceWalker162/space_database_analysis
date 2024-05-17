@@ -32,6 +32,11 @@ radius_Mercury_in_meters = 2.4397 * 10**6
 solarNorthPoleOfRotationInICRFEquatorial = np.array([63.87, 286.13])/180*np.pi # latitude and longitude
 saturnianNorthPoleOfRotationInICRFEquatorial = np.array([83.54, 40.58])/180*np.pi
 
+mass_proton = 1.6726 * 10**(-27)
+mass_electron = 9.11 * 10**(-31)
+
+eV = 1.602176634 * 10**(-19)
+
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff /nyq
