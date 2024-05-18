@@ -25,6 +25,7 @@ import queue
 __readftpFileNameLog ='readftpFileName.log'
 __readFTPDirLog = 'readFTPDir.log'
 __database_dataset_info_file_name = 'datasets_info'
+__database_additional_dataset_info_file_name = 'additional_datasets_info'
 ## run this file under the destination directory 
 
 dataTypeTransformationDict_PDS = {
@@ -117,8 +118,63 @@ class Database:
                                 raise Exception('something went wrong')
         return outdatedFilePaths
 
+    def define_add_info(self, datasetID):
+        dID = datasetID
+        dataset = {'Id': dID}
+        if dID[:3] == 'MMS':
+            if 'FPI_FAST' in dID:
+                dataset.update({'dataset_file_time_gap': '2 hour'})
+            if 'EDP_FAST' in dID:
+                dataset.update({'dataset_file_time_gap': '1 day'})
+            if 'EDP_SLOW' in dID:
+                dataset.update({'dataset_file_time_gap': '1 day'})
+        elif dID[:4] == 'OMNI':
+            dataset.update({'dataset_file_time_gap': '1 month'})
+            if 'HRO' in dID:
+                dataset_path = os.path.join('omni', 'omni_cdaweb', dID[5:].lower())
+                dataset.update({'dataset_path': dataset_path})
+        return dataset
 
-    def make_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name='additional_datasets_info', get_info_from_CDAWeb=False, dry_run=False):
+
+    def make_additional_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name=__database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
+        '''
+        Purpose:
+            Create a file storing support information about the datasets in the database
+        Parameters:
+            get_info_from_CDAWeb: if False, the function will get datasetID from the file defined by save_name
+
+        '''
+        datasets_dic = {}
+        if get_info_from_CDAWeb:
+            cdaswsObj = cdasws.CdasWs()
+            datasets = cdaswsObj.get_datasets()
+            for dataset in datasets:
+                datasets_dic[dataset['Id']] = dataset
+        else:
+            for path in self.paths:
+                save_path = os.path.join(path, save_name)
+                if os.path.exists(save_path):
+                    with open(save_path, 'r') as f:
+                        datasets_dic = json.load(f)
+                    break
+        for path in self.paths:
+            add_info_file_path = os.path.join(path, add_info_file_name)
+            if os.path.exists(add_info_file_path):
+                with open(add_info_file_path, 'r') as f:
+                    add_info = json.load(f)
+                break
+        else:
+            add_info = {}
+        for key, dataset in datasets_dic.items():
+            dataset_add_info = self.define_add_info(key)
+            add_info.update(dataset_add_info)
+        for path in self.paths:
+            add_info_file_path = os.path.join(path, add_info_file_name)
+            with open(add_info_file_path, 'w') as f:
+                json.dump(add_info, f)
+
+
+    def make_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name=__database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
         '''
         Purpose:
             Create a file storing support information about the datasets in the database
@@ -126,18 +182,6 @@ class Database:
             get_info_from_CDAWeb: if False, the function will get info from a previously saved file.
 
         '''
-        def add_info_to_dic(dataset):
-            dID = dataset['Id']
-            if dID[:3] == 'MMS':
-                if 'FPI_FAST' in dID:
-                    dataset.update({'dataset_file_time_gap': '2 hour'})
-                if 'EDP_FAST' in dID:
-                    dataset.update({'dataset_file_time_gap': '1 day'})
-                if 'EDP_SLOW' in dID:
-                    dataset.update({'dataset_file_time_gap': '1 day'})
-            elif dID[:4] == 'OMNI':
-                dataset.update({'dataset_file_time_gap': '1 month'})
-
         datasets_dic = {}
         if get_info_from_CDAWeb:
             cdaswsObj = cdasws.CdasWs()
