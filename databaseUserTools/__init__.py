@@ -1,4 +1,5 @@
 __author__ = 'Yufei Zhou'
+## This file contains functions and classes related to work with a local database. In case of insufficiency of the local database, access to remote database and internet may be needed
 
 import numpy as np
 import pandas as pd
@@ -434,9 +435,10 @@ class Spacecraft:
                 variableNamesAndRetrievingNames = item[1:]
                 variableNames = [varRet[0] for varRet in variableNamesAndRetrievingNames]
                 dataset_info = datasets_info.get(datasetID)
-                if not dataset_info:
-                    dataset_info = {}
-                dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
+                if dataset_info:
+                    dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
+                else:
+                    dataset = Dataset(datasetID=datasetID, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
                 dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
                 for varName, retName in variableNamesAndRetrievingNames:
                     dataset.data[retName] = dataset.data.pop(varName)
@@ -495,7 +497,7 @@ class Spacecraft:
                                     desiredDataPaths.append(workFilePath)
                                 else:
                                     if copy_if_not_exist:
-                                        destFilePath = dbt.workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
+                                        destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
                                         desiredDataPaths.append(destFilePath)
                                     else:
                                         desiredDataPaths.append(filePathBak)
@@ -613,11 +615,12 @@ class Dataset:
             self.datasetID = dataset_info['Id']
             self.dataset_info = dataset_info
         else:
+            assert datasetID
             self.datasetID = datasetID
             datasets_info = loadDatasets_info(self.databasePath, self.databaseBakPaths)
-            self.dataset_info = datasets_info[datasetID]
+            self.dataset_info = datasets_info.get(datasetID, {})
 
-        dataset_file_time_gap_str = dataset_info.get('dataset_file_time_gap')
+        dataset_file_time_gap_str = self.dataset_info.get('dataset_file_time_gap')
         if dataset_file_time_gap_str:
 #            logging.info(dataset_file_time_gap_str)
             num, unit = dataset_file_time_gap_str.split(' ')
@@ -746,7 +749,7 @@ class Dataset:
         if numFiles == 1:
             filePath = filePaths[0]
         elif numFiles == 0:
-            logging.warning("No file was found.")
+            logging.warning("No file was found under {}".format(absolutePathToDataset))
         elif numFiles > 1:
             logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
         return filePath
@@ -756,19 +759,20 @@ class Dataset:
         search_criteria = self._define_search_criteria(beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
         datasetPathInDatabase = self.dataset_info.get('dataset_path')
         if not datasetPathInDatabase:
-            datasetPathInDatabase = os.path.join(self.datasetID.lower().split('_'))
+            datasetPathInDatabase = os.path.join(*self.datasetID.lower().split('_'))
         datasetAbsolutePath = os.path.join(self.dataPath, datasetPathInDatabase)
-        filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
+        logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
+        filePath = self._get_file_path(datasetAbsolutePath, dateTime=beginOfTheFilePeriod, search_func=search_func, **search_criteria)
         if filePath:
             pass
         else:
             if self.dataBakPaths:
                 for dataPathBak in self.dataBakPaths:
                     datasetAbsolutePath = os.path.join(dataPathBak, datasetPathInDatabase)
-                    filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
+                    filePath = self._get_file_path(datasetAbsolutePath, dateTime=beginOfTheFilePeriod, search_func=search_func, **search_criteria)
                     if filePath:
                         if copy_if_not_exist:
-                            destFilePath = dbt.workDataDirCopy(filePath, self.dataPath, dataPathBak)
+                            destFilePath = workDataDirCopy(filePath, self.dataPath, dataPathBak)
                             filePath = destFilePath
                         break
             if not filePath and search_online:
@@ -812,10 +816,10 @@ class Dataset:
             else:
                 datetimeRange = [start_, endOfTheFilePeriod]
             filePath = self._get_file_path_from_multiple_resources(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
-            cdfFile = cdflib.CDF(filePath)
             if not filePath:
                 logging.info('data file not found')
             else:
+                cdfFile = cdflib.CDF(filePath)
                 logging.info('reading data file: {}'.format(filePath))
                 logging.info('datetimeRange: {}'.format(datetimeRange))
                 dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
@@ -1721,3 +1725,51 @@ def readHoriaonsData(dataFilePath):
         dataDict[key]['data'] = np.array(dataDict[key]['data'])
     return dataDict, columnNames
 
+
+def update_datasets_info(databasePath, databaseBakPaths):
+    database = dbt.Database(databaseBakPaths)
+    for path in databaseBakPaths:
+        if path in database.additional_datasets_info_paths[0]:
+            databasePathBak = path
+
+    filePath = database.additional_datasets_info_paths[0]
+    relpath = os.path.relpath(filePath, databasePathBak)
+    destFilePath = os.path.join(databasePath, relpath)
+    logging.warning('copying {} to {} ...'.format(filePath, destFilePath))
+    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+    cmdArgs = ['cp', filePath, destFilePath]
+    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process.wait()
+    logging.warning('file copied')
+
+def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
+    database = dbt.Database([databasePath])
+    database.load_additional_datasets_info()
+    if database.additional_datasets_info:
+        datasets_info = database.additional_datasets_info
+    elif databaseBakPaths:
+        database = dbt.Database(databaseBakPaths)
+        if copy_if_not_exist:
+            for path in databaseBakPaths:
+                if path in database.additional_datasets_info_paths[0]:
+                    databasePathBak = path
+            destFilePath = workDataDirCopy(database.additional_datasets_info_paths[0], databasePath, databasePathBak)
+            with open(destFilePath, 'r') as f:
+                datasets_info = json.load(f)
+        else:
+            with open(database.additional_datasets_info_paths[0], 'r') as f:
+                datasets_info = json.load(f)
+    return datasets_info
+
+def workDataDirCopy(filePath, workDataDir, workDataDirBak):
+    relpath = os.path.relpath(filePath, workDataDirBak)
+    destFilePath = os.path.join(workDataDir, relpath)
+    logging.warning('file not found in wordDataDir {}, but found in workDataDirBak: {}'.format(workDataDir, workDataDirBak))
+    logging.warning('now copying to {} ...'.format(destFilePath))
+    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+    cmdArgs = ['cp', filePath, destFilePath]
+    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process.wait()
+    logging.info('{} copied'.format(destFilePath))
+    logging.warning('file copied')
+    return destFilePath

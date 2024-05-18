@@ -68,3 +68,7 @@ if __name__ == '__main__':
     for dataset in datasets:
         print(dataset['Id'])
     status, files = cdaswsObj.get_original_files(dataset['Id'], *datetimeRange)
+    ##
+    database = dbt.Database([remoteWorkDataDir])
+    datasets_info = database.loadDatasets_info()
+

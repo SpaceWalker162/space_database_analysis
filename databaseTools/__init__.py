@@ -1,4 +1,5 @@
 __author__ = 'Yufei Zhou'
+## This file contains functions and classes related to building a database
 
 import tarfile
 from ftplib import FTP_TLS
@@ -8,6 +9,7 @@ import json
 import cdasws
 from datetime import datetime, timedelta
 import urllib3
+from urllib.parse import urlparse
 import time
 import space_database_analysis.otherTools as ot
 import copy
@@ -36,14 +38,29 @@ dataTypeTransformationDict_PDS = {
 class Database:
 
     def __init__(self, databasePaths=[]):
+        '''
+        Purposes:
+            pass
+
+        datasets_info stores detailed information for all datasets
+        additional_datasets_info stores information needed by databaseUserTools to load data
+        '''
         self.paths = databasePaths
+        self.path = self.paths[0]
+        self.datasets_info = {}
+        self.additional_datasets_info = {}
         self.datasets_info_paths = []
-        self._database_dataset_info_file_name = 'datasets_info'
-        self._database_additional_dataset_info_file_name = 'additional_datasets_info'
+        self.additional_datasets_info_paths = []
+        self._metadata_path = 'metadata'
+        self._database_dataset_info_file_name = os.path.join(self._metadata_path, 'datasets_info')
+        self._database_additional_dataset_info_file_name = os.path.join(self._metadata_path, 'additional_datasets_info')
         for path in self.paths:
-            dataset_info_file_path = os.path.join(path, self._database_dataset_info_file_name)
-            if os.path.exists(dataset_info_file_path):
-                self.datasets_info_paths.append(dataset_info_file_path)
+            datasets_info_file_path = os.path.join(path, self._database_dataset_info_file_name)
+            additional_datasets_info_file_path = os.path.join(path, self._database_additional_dataset_info_file_name)
+            if os.path.exists(datasets_info_file_path):
+                self.datasets_info_paths.append(datasets_info_file_path)
+            if os.path.exists(additional_datasets_info_file_path):
+                self.additional_datasets_info_paths.append(additional_datasets_info_file_path)
 
 
     def removeOutdatedFiles(self):
@@ -123,21 +140,57 @@ class Database:
         dID = datasetID
         dataset = {'Id': dID}
         if dID[:3] == 'MMS':
+            dataset_path = os.path.join('mms', *dID.split('_')).lower()
+            dataset.update({'dataset_path': dataset_path})
             if 'FPI_FAST' in dID:
-                dataset.update({'dataset_file_time_gap': '2 hour'})
+                dataset.update({
+                    'dataset_file_time_gap': '2 hour',
+                    'file_naming_convention': '{datasetIDLower}_%Y%m%d%H%M%S',
+                                })
             if 'EDP_FAST' in dID:
                 dataset.update({'dataset_file_time_gap': '1 day'})
             if 'EDP_SLOW' in dID:
                 dataset.update({'dataset_file_time_gap': '1 day'})
         elif dID[:4] == 'OMNI':
-            dataset.update({'dataset_file_time_gap': '1 month'})
+            dataset.update({
+                'dataset_file_time_gap': '1 month',
+                'file_naming_convention': '{datasetIDLower}_%Y%m%d',
+                })
             if 'HRO' in dID:
                 dataset_path = os.path.join('omni', 'omni_cdaweb', dID[5:].lower())
                 dataset.update({'dataset_path': dataset_path})
         return dataset
 
-    def define_dataset_file_naming_convention(self):
-        datasets_info = loadDatasets_info()
+    def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):
+        '''
+        Purpose: determine file naming convention for a dataset
+        '''
+        if get_from_CDAWeb_metadata: # this branch needs further development and is deprecated for the moment
+            dataset = self.datasets_info[datasetID]
+            for d_ in dataset['AdditionalMetadata']:
+                if d_['Type'] == 'SPDF_SKT_CDF':
+                    cdf_file_info_url = d_['value']
+            o = urlparse(cdf_file_info_url)
+            for path in self.paths:
+                file_path = os.path.join(path, *o.path.split('/')[2:])
+                if os.path.exists(file_path):
+                    with open(file_path, 'r') as f:
+                        dic = json.load(f)
+                    cdfGlobalAttributes = dic[list(dic.keys())[0]].get('CDFglobalAttributes')
+                    for item in cdfGlobalAttributes:
+                        file_naming_convention_dic = item.get('File_naming_convention')
+                        if file_naming_convention_dic:
+                            file_naming_convention = file_naming_convention_dic[0]['0']
+        return file_naming_convention
+
+    def define_datasets_file_naming_convention(self, get_from_CDAWeb_metadata=False):
+        '''
+        Purpose: determine file naming conventions for all dataset
+        '''
+        # this function is under development
+        self.loadDatasets_info()
+        for datasetID in self.datasets_info.keys():
+            dataset_naming_convention = self.define_dataset_file_naming_convention(datasetID, get_from_CDAWeb_metadata=get_from_CDAWeb_metadata)
 
 
     def make_additional_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
@@ -182,7 +235,7 @@ class Database:
                 json.dump(add_info, f)
 
 
-    def make_datasets_info(self, save_name=_database_dataset_info_file_name, add_info_file_name=_database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
+    def make_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
         '''
         Purpose:
             Create a file storing support information about the datasets in the database
@@ -196,34 +249,30 @@ class Database:
             datasets = cdaswsObj.get_datasets()
             for dataset in datasets:
                 datasets_dic[dataset['Id']] = dataset
-        else:
-            for path in self.paths:
-                save_path = os.path.join(path, save_name)
-                if os.path.exists(save_path):
-                    with open(save_path, 'r') as f:
-                        datasets_dic = json.load(f)
-                    break
         for path in self.paths:
-            add_info_file_path = os.path.join(path, add_info_file_name)
-            if os.path.exists(add_info_file_path):
-                with open(add_info_file_path, 'r') as f:
-                    add_info = json.load(f)
-                break
-        else:
-            add_info = {}
-        for key, dataset in datasets_dic.items():
-            if key in add_info:
-                dataset.update(add_info[key])
-        if dry_run:
-            return datasets_dic
-        for path in self.paths:
-            save_path = os.path.join(path, save_name)
+            save_path = os.path.join(path, self._database_dataset_info_file_name)
             with open(save_path, 'w') as f:
                 json.dump(datasets_dic, f)
 
-    def loadDatasets_info(self):
+    def _loadDataset_info(self, datasetID=None):
+        '''
+        This function is deprecated
+        load dataset_info into self.datasets_info
+        Parameters:
+            datasetID: a string either being 'all' or t
+        '''
         with open(self.datasets_info_paths[0], 'r') as f:
             self.datasets_info = json.load(f)
+
+    def loadDatasets_info(self):
+        if self.datasets_info_paths:
+            with open(self.datasets_info_paths[0], 'r') as f:
+                self.datasets_info = json.load(f)
+
+    def load_additional_datasets_info(self):
+        if self.additional_datasets_info_paths:
+            with open(self.additional_datasets_info_paths[0], 'r') as f:
+                self.additional_datasets_info = json.load(f)
 
 def dirsInit(path, dictOfDirs):
     for supperDir, subDir in dictOfDirs.items():
@@ -1180,38 +1229,6 @@ def isComplete(fileName, start, end, dataset, dataFormat='CDF', fileType='r:gz')
             file.write(fileName+' exception\n')            
         return False
             
-
-def workDataDirCopy(filePath, workDataDir, workDataDirBak):
-    relpath = os.path.relpath(filePath, workDataDirBak)
-    destFilePath = os.path.join(workDataDir, relpath)
-    logging.warning('file not found in wordDataDir {}, but found in workDataDirBak: {}'.format(workDataDir, workDataDirBak))
-    logging.warning('now copying to {} ...'.format(destFilePath))
-    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-    cmdArgs = ['cp', filePath, destFilePath]
-    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    process.wait()
-    logging.info('{} copied'.format(destFilePath))
-    logging.warning('file copied')
-    return destFilePath
-
-
-def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
-    database = dbt.Database([databasePath])
-    if database.datasets_info_paths:
-        with open(database.datasets_info_paths[0], 'r') as f:
-            datasets_info = json.load(f)
-    elif databaseBakPaths:
-        database = dbt.Database(databaseBakPaths)
-        if copy_if_not_exist:
-            databasePathBak = os.path.split(database.datasets_info_paths[0])[0]
-            destFilePath = workDataDirCopy(database.datasets_info_paths[0], databasePath, databasePathBak)
-            with open(destFilePath, 'r') as f:
-                datasets_info = json.load(f)
-        else:
-            with open(database.datasets_info_paths[0], 'r') as f:
-                datasets_info = json.load(f)
-    return datasets_info
-
 
 def transformPDSdataToCDF(databaseDir, dataTransDict=None, stringCriteria=['FGM_KSM_1M'], infoFileExtension='.LBL', cdfFileNameFMT=None, recordPath=None):
     raise Exception('This function was moved to the submodule databaseDataFormat')

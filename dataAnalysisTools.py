@@ -613,6 +613,14 @@ class Epochs:
             self.epochs = epochs
             self.dateTimeList = map_multi_dimensional_list(epoch2datetimeWithEpochType, epochs.tolist())
 
+    def to_epochs(self, epochType='CDF_TIME_TT2000'):
+        '''
+        transform to other format of epochs
+
+        '''
+
+        return epochs
+
     def epochRecords(self, ts, tolerance=1):
         '''
         Parameters:
