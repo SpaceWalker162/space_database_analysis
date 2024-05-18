@@ -24,8 +24,6 @@ import queue
 
 _readftpFileNameLog ='readftpFileName.log'
 _readFTPDirLog = 'readFTPDir.log'
-_database_dataset_info_file_name = 'datasets_info'
-_database_additional_dataset_info_file_name = 'additional_datasets_info'
 ## run this file under the destination directory 
 
 dataTypeTransformationDict_PDS = {
@@ -40,8 +38,10 @@ class Database:
     def __init__(self, databasePaths=[]):
         self.paths = databasePaths
         self.datasets_info_paths = []
+        self._database_dataset_info_file_name = 'datasets_info'
+        self._database_additional_dataset_info_file_name = 'additional_datasets_info'
         for path in self.paths:
-            dataset_info_file_path = os.path.join(path, _database_dataset_info_file_name)
+            dataset_info_file_path = os.path.join(path, self._database_dataset_info_file_name)
             if os.path.exists(dataset_info_file_path):
                 self.datasets_info_paths.append(dataset_info_file_path)
 
@@ -135,8 +135,9 @@ class Database:
                 dataset.update({'dataset_path': dataset_path})
         return dataset
 
+    def define_dataset_file_naming_convention(self):
 
-    def make_additional_datasets_info(self, save_name=_database_dataset_info_file_name, add_info_file_name=_database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
+    def make_additional_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
         '''
         Purpose:
             Create a file storing support information about the datasets in the database
@@ -152,13 +153,13 @@ class Database:
                 datasets_dic[dataset['Id']] = dataset
         else:
             for path in self.paths:
-                save_path = os.path.join(path, save_name)
+                save_path = os.path.join(path, self._database_dataset_info_file_name)
                 if os.path.exists(save_path):
                     with open(save_path, 'r') as f:
                         datasets_dic = json.load(f)
                     break
         for path in self.paths:
-            add_info_file_path = os.path.join(path, add_info_file_name)
+            add_info_file_path = os.path.join(path, self._database_additional_dataset_info_file_name)
             if os.path.exists(add_info_file_path):
                 with open(add_info_file_path, 'r') as f:
                     add_info = json.load(f)
@@ -173,7 +174,7 @@ class Database:
                 add_info[key].update(dataset_add_info)
 
         for path in self.paths:
-            add_info_file_path = os.path.join(path, add_info_file_name)
+            add_info_file_path = os.path.join(path, self._database_additional_dataset_info_file_name)
             with open(add_info_file_path, 'w') as f:
                 json.dump(add_info, f)
 

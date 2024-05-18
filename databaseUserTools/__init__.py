@@ -658,63 +658,74 @@ class Dataset:
 
     def _define_search_criteria(self, beginOfTheFilePeriod=None, endOfTheFilePeriod=None, dateTime=None, size='allSize', **para):
         search_criteria = {}
-        if dateTime:
-            start = dateTime
-            end = start + timedelta(seconds=1)
-        elif beginOfTheFilePeriod:
-            start = beginOfTheFilePeriod
-            end = start + timedelta(seconds=1)
-        criteria = []
-        timeTag = None
-#        logging.debug("mission: {}".format(self.mission))
-        if self.mission == 'mms':
-            if 'brst' in self.instrumentationPath:
-                searchMethod = 'allFilesInTimeRange'
-            else:
-                searchMethod = 'general'
-                criteria.extend(self.instrumentation.copy())
-                if self.dataset_file_time_gap is not None:
-                    if self.dataset_file_time_gap < timedelta(days=1):
-                        criteria.append(self.filePeriodRange[0].strftime("%Y%m%d%H"))
-                    elif self.dataset_file_time_gap == timedelta(days=1):
-                        criteria.append(start.strftime("%Y%m%d"))
-        elif self.mission == 'cluster':
-            if 'cis-hia' in self.instrumentationPath:
-                searchMethod = 'general'
-                infoList_ = self.instrumentation[1].split('_')
-                mode = infoList_[2][:-4]
-                sensitivity = infoList_[3][0]
-                dataName_ = infoList_[4]
-                if dataName_ == 'phasespacedens':
-                    dataNameAbb = 'psd'
-                elif dataName_ == 'diffenergyflux':
-                    dataNameAbb = 'pef'
-                restructedStrCriterion = '_'.join(['cis-hia', sensitivity+'s', mode, 'ions', dataNameAbb])
-                criteria.append(restructedStrCriterion)
-                criteria.append('v2022')
-                criteria.append(start.strftime("%Y%m%d"))
-            else:
-                searchMethod = 'ClusterCAA'
-                interval = [start, end]
-                search_criteria.update({'interval': interval})
-                logging.debug('ClusterCAA searching criteria (instrumentation)')
-                logging.debug(self.instrumentation)
-                criteria.extend(self.instrumentation.copy()[1:])
-                criteria.append(start.strftime("%Y%m%d"))
-        elif self.mission == 'ace':
-            searchMethod = 'general'
-            criteria.append(start.strftime("%Y%m%d"))
-        elif self.mission == 'cassini':
-            searchMethod = 'general'
-            if 'CO-E_SW_J_S-MAG-4-SUMM-1MINAVG-V2.0' in self.instrumentation:
-                criteria.append(start.strftime("%Y"))
-            else:
-                criteria.append(start.strftime("%Y%m%d"))
+        strings = []
+        search_criteria.update({'strings': strings, 'size': size})
+        file_naming_convention = self.dataset_info.get('file_naming_convention')
+        if file_naming_convention:
+            file_naming_convention = beginOfTheFilePeriod.strftime(file_naming_convention.format(datasetIDLower=self.datasetID.lower()))
+            strings.append(file_naming_convention)
         else:
-            searchMethod = 'general'
-            raise Exception('mission not defined!')
+            strings.append(self.datasetID.lower())
+            strings.append(beginOfTheFilePeriod.strftime("%Y%m%d"))
+#        search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
 
-        search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
+#        if dateTime:
+#            start = dateTime
+#            end = start + timedelta(seconds=1)
+#        elif beginOfTheFilePeriod:
+#            start = beginOfTheFilePeriod
+#            end = start + timedelta(seconds=1)
+#        criteria = []
+#        timeTag = None
+#        logging.debug("mission: {}".format(self.mission))
+#        if self.mission == 'mms':
+#            if 'brst' in self.instrumentationPath:
+#                searchMethod = 'allFilesInTimeRange'
+#            else:
+#                searchMethod = 'general'
+#                criteria.extend(self.instrumentation.copy())
+#                if self.dataset_file_time_gap is not None:
+#                    if self.dataset_file_time_gap < timedelta(days=1):
+#                        criteria.append(self.filePeriodRange[0].strftime("%Y%m%d%H"))
+#                    elif self.dataset_file_time_gap == timedelta(days=1):
+#                        criteria.append(start.strftime("%Y%m%d"))
+#        elif self.mission == 'cluster':
+#            if 'cis-hia' in self.instrumentationPath:
+#                searchMethod = 'general'
+#                infoList_ = self.instrumentation[1].split('_')
+#                mode = infoList_[2][:-4]
+#                sensitivity = infoList_[3][0]
+#                dataName_ = infoList_[4]
+#                if dataName_ == 'phasespacedens':
+#                    dataNameAbb = 'psd'
+#                elif dataName_ == 'diffenergyflux':
+#                    dataNameAbb = 'pef'
+#                restructedStrCriterion = '_'.join(['cis-hia', sensitivity+'s', mode, 'ions', dataNameAbb])
+#                criteria.append(restructedStrCriterion)
+#                criteria.append('v2022')
+#                criteria.append(start.strftime("%Y%m%d"))
+#            else:
+#                searchMethod = 'ClusterCAA'
+#                interval = [start, end]
+#                search_criteria.update({'interval': interval})
+#                logging.debug('ClusterCAA searching criteria (instrumentation)')
+#                logging.debug(self.instrumentation)
+#                criteria.extend(self.instrumentation.copy()[1:])
+#                criteria.append(start.strftime("%Y%m%d"))
+#        elif self.mission == 'ace':
+#            searchMethod = 'general'
+#            criteria.append(start.strftime("%Y%m%d"))
+#        elif self.mission == 'cassini':
+#            searchMethod = 'general'
+#            if 'CO-E_SW_J_S-MAG-4-SUMM-1MINAVG-V2.0' in self.instrumentation:
+#                criteria.append(start.strftime("%Y"))
+#            else:
+#                criteria.append(start.strftime("%Y%m%d"))
+#        else:
+#            searchMethod = 'general'
+#            raise Exception('mission not defined!')
+
+#        search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
         return search_criteria
 
     def _get_file_path(self, absolutePathToDataset, dateTime=None, search_func=None, **search_criteria):
