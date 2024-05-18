@@ -495,7 +495,7 @@ class Spacecraft:
                                     desiredDataPaths.append(workFilePath)
                                 else:
                                     if copy_if_not_exist:
-                                        destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
+                                        destFilePath = dbt.workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
                                         desiredDataPaths.append(destFilePath)
                                     else:
                                         desiredDataPaths.append(filePathBak)
@@ -592,28 +592,23 @@ class Spacecraft:
                 dic[key] = varData
 
 
-def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
-    database = dbt.Database([databasePath])
-    if database.datasets_info_paths:
-        with open(database.datasets_info_paths[0], 'r') as f:
-            datasets_info = json.load(f)
-    elif databaseBakPaths:
-        database = dbt.Database(databaseBakPaths)
-        if copy_if_not_exist:
-            databasePathBak = os.path.split(database.datasets_info_paths[0])[0]
-            destFilePath = workDataDirCopy(database.datasets_info_paths[0], databasePath, databasePathBak)
-            with open(destFilePath, 'r') as f:
-                datasets_info = json.load(f)
-        else:
-            with open(database.datasets_info_paths[0], 'r') as f:
-                datasets_info = json.load(f)
-    return datasets_info
 
 
 class Dataset:
     def __init__(self, datasetID=None, dataset_info=None, databasePath=None, databaseBakPaths=None):
+        '''
+        Expected database directory:
+            database:
+                data:
+                    mms
+                    cluster
+                software:
+                    something
+        '''
         self.databasePath = databasePath
-        self.databaseBakPaths= databaseBakPaths
+        self.databaseBakPaths = databaseBakPaths
+        self.dataPath = os.path.join(self.databasePath, 'data')
+        self.dataBakPaths = [os.path.join(databaseBakPath, 'data') for databaseBakPath in self.databaseBakPaths]
         if dataset_info:
             self.datasetID = dataset_info['Id']
             self.dataset_info = dataset_info
@@ -762,18 +757,18 @@ class Dataset:
         datasetPathInDatabase = self.dataset_info.get('dataset_path')
         if not datasetPathInDatabase:
             datasetPathInDatabase = os.path.join(self.datasetID.lower().split('_'))
-        datasetAbsolutePath = os.path.join(self.databasePath, datasetPathInDatabase)
+        datasetAbsolutePath = os.path.join(self.dataPath, datasetPathInDatabase)
         filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
         if filePath:
             pass
         else:
-            if self.databaseBakPaths:
-                for databasePathBak in self.databaseBakPaths:
-                    datasetAbsolutePath = os.path.join(databasePathBak, datasetPathInDatabase)
+            if self.dataBakPaths:
+                for dataPathBak in self.dataBakPaths:
+                    datasetAbsolutePath = os.path.join(dataPathBak, datasetPathInDatabase)
                     filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
                     if filePath:
                         if copy_if_not_exist:
-                            destFilePath = workDataDirCopy(filePath, self.databasePath, databasePathBak)
+                            destFilePath = dbt.workDataDirCopy(filePath, self.dataPath, dataPathBak)
                             filePath = destFilePath
                         break
             if not filePath and search_online:
@@ -792,7 +787,7 @@ class Dataset:
                     fileURL = file['Name']
                     o = urlparse(fileURL)
                     filePathInDatabase = os.path.join(*o.path.split('/')[3:])
-                    destFilePath = os.path.join(self.databasePath, filePathInDatabase)
+                    destFilePath = os.path.join(self.dataPath, filePathInDatabase)
                     os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
                     logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
                     urlretrieve(fileURL, destFilePath)
@@ -897,18 +892,6 @@ def spacecraftsDataResampling(spacecrafts, source, dataName, timeName='t', resam
     return resamplingT, dataAllSpacecrafts
 
 
-def workDataDirCopy(filePath, workDataDir, workDataDirBak):
-    relpath = os.path.relpath(filePath, workDataDirBak)
-    destFilePath = os.path.join(workDataDir, relpath)
-    logging.warning('file not found in wordDataDir {}, but found in workDataDirBak: {}'.format(workDataDir, workDataDirBak))
-    logging.warning('now copying to {} ...'.format(destFilePath))
-    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-    cmdArgs = ['cp', filePath, destFilePath]
-    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    process.wait()
-    logging.info('{} copied'.format(destFilePath))
-    logging.warning('file copied')
-    return destFilePath
 
 
 def extractFiles(databaseDir, workDataDir, datasets, interval, keepIfExist=True):

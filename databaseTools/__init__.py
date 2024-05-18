@@ -79,7 +79,8 @@ class Database:
 
         outdatedFilePaths = []
         for databaseDir in self.paths:
-            fileInfoDict = readFileInfoRecursively(path=databaseDir, verbose=verbose, facts=None)
+            dataDir = os.path.join(databaseDir, 'data')
+            fileInfoDict = readFileInfoRecursively(path=dataDir, verbose=verbose, facts=None)
             dirKeys = set(ot.doAtLeavesOfADict(dic=fileInfoDict, do=getDirDic))
             for ind, dirKey in enumerate(dirKeys):
                 if dirKey:
@@ -110,7 +111,7 @@ class Database:
                                 else:
                                     fileNameOfOldVersion = None
                                 if fileNameOfOldVersion:
-                                    outdatedFilePaths.append(os.path.join(databaseDir, dirPath, fileNameOfOldVersion))
+                                    outdatedFilePaths.append(os.path.join(dataDir, dirPath, fileNameOfOldVersion))
                                     break
                             else:
                                 print(fileName)
@@ -136,6 +137,8 @@ class Database:
         return dataset
 
     def define_dataset_file_naming_convention(self):
+        datasets_info = loadDatasets_info()
+
 
     def make_additional_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
         '''
@@ -211,7 +214,6 @@ class Database:
         for key, dataset in datasets_dic.items():
             if key in add_info:
                 dataset.update(add_info[key])
-            add_info_to_dic(dataset)
         if dry_run:
             return datasets_dic
         for path in self.paths:
@@ -219,6 +221,9 @@ class Database:
             with open(save_path, 'w') as f:
                 json.dump(datasets_dic, f)
 
+    def loadDatasets_info(self):
+        with open(self.datasets_info_paths[0], 'r') as f:
+            self.datasets_info = json.load(f)
 
 def dirsInit(path, dictOfDirs):
     for supperDir, subDir in dictOfDirs.items():
@@ -1175,6 +1180,38 @@ def isComplete(fileName, start, end, dataset, dataFormat='CDF', fileType='r:gz')
             file.write(fileName+' exception\n')            
         return False
             
+
+def workDataDirCopy(filePath, workDataDir, workDataDirBak):
+    relpath = os.path.relpath(filePath, workDataDirBak)
+    destFilePath = os.path.join(workDataDir, relpath)
+    logging.warning('file not found in wordDataDir {}, but found in workDataDirBak: {}'.format(workDataDir, workDataDirBak))
+    logging.warning('now copying to {} ...'.format(destFilePath))
+    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+    cmdArgs = ['cp', filePath, destFilePath]
+    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    process.wait()
+    logging.info('{} copied'.format(destFilePath))
+    logging.warning('file copied')
+    return destFilePath
+
+
+def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
+    database = dbt.Database([databasePath])
+    if database.datasets_info_paths:
+        with open(database.datasets_info_paths[0], 'r') as f:
+            datasets_info = json.load(f)
+    elif databaseBakPaths:
+        database = dbt.Database(databaseBakPaths)
+        if copy_if_not_exist:
+            databasePathBak = os.path.split(database.datasets_info_paths[0])[0]
+            destFilePath = workDataDirCopy(database.datasets_info_paths[0], databasePath, databasePathBak)
+            with open(destFilePath, 'r') as f:
+                datasets_info = json.load(f)
+        else:
+            with open(database.datasets_info_paths[0], 'r') as f:
+                datasets_info = json.load(f)
+    return datasets_info
+
 
 def transformPDSdataToCDF(databaseDir, dataTransDict=None, stringCriteria=['FGM_KSM_1M'], infoFileExtension='.LBL', cdfFileNameFMT=None, recordPath=None):
     raise Exception('This function was moved to the submodule databaseDataFormat')
