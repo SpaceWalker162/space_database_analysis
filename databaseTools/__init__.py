@@ -22,10 +22,10 @@ import ctypes
 import queue
 #from _thread import interrupt_main
 
-__readftpFileNameLog ='readftpFileName.log'
-__readFTPDirLog = 'readFTPDir.log'
-__database_dataset_info_file_name = 'datasets_info'
-__database_additional_dataset_info_file_name = 'additional_datasets_info'
+_readftpFileNameLog ='readftpFileName.log'
+_readFTPDirLog = 'readFTPDir.log'
+_database_dataset_info_file_name = 'datasets_info'
+_database_additional_dataset_info_file_name = 'additional_datasets_info'
 ## run this file under the destination directory 
 
 dataTypeTransformationDict_PDS = {
@@ -41,7 +41,7 @@ class Database:
         self.paths = databasePaths
         self.datasets_info_paths = []
         for path in self.paths:
-            dataset_info_file_path = os.path.join(path, __database_dataset_info_file_name)
+            dataset_info_file_path = os.path.join(path, _database_dataset_info_file_name)
             if os.path.exists(dataset_info_file_path):
                 self.datasets_info_paths.append(dataset_info_file_path)
 
@@ -136,7 +136,7 @@ class Database:
         return dataset
 
 
-    def make_additional_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name=__database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
+    def make_additional_datasets_info(self, save_name=_database_dataset_info_file_name, add_info_file_name=_database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
         '''
         Purpose:
             Create a file storing support information about the datasets in the database
@@ -167,14 +167,18 @@ class Database:
             add_info = {}
         for key, dataset in datasets_dic.items():
             dataset_add_info = self.define_add_info(key)
-            add_info.update(dataset_add_info)
+            if len(dataset_add_info) > 1:
+                if key not in add_info:
+                    add_info[key] = {}
+                add_info[key].update(dataset_add_info)
+
         for path in self.paths:
             add_info_file_path = os.path.join(path, add_info_file_name)
             with open(add_info_file_path, 'w') as f:
                 json.dump(add_info, f)
 
 
-    def make_datasets_info(self, save_name=__database_dataset_info_file_name, add_info_file_name=__database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
+    def make_datasets_info(self, save_name=_database_dataset_info_file_name, add_info_file_name=_database_additional_dataset_info_file_name, get_info_from_CDAWeb=False, dry_run=False):
         '''
         Purpose:
             Create a file storing support information about the datasets in the database
@@ -835,8 +839,8 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
         return None
 
     if logFileHandle is None:
-        readFTPDirLog = os.path.join(logFileDir, __readFTPDirLog)
-        readftpFileNameLog = os.path.join(logFileDir, __readftpFileNameLog)
+        readFTPDirLog = os.path.join(logFileDir, _readFTPDirLog)
+        readftpFileNameLog = os.path.join(logFileDir, _readftpFileNameLog)
         fFTPFile = open(readftpFileNameLog, 'w')
         fFTPDir = open(readFTPDirLog, 'w')
         logFileHandle = (fFTPDir, fFTPFile)
@@ -897,7 +901,7 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
 
 
 def loadFileInfoDict(logFileDir=''):
-    readftpFileNameLog = os.path.join(logFileDir, __readftpFileNameLog)
+    readftpFileNameLog = os.path.join(logFileDir, _readftpFileNameLog)
     with open(readftpFileNameLog, 'r') as f:
         info = f.read().splitlines()
     infoList = []

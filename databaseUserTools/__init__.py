@@ -30,6 +30,8 @@ from wolframclient.evaluation import WolframLanguageSession
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 import space_database_analysis.dataAnalysisTools as dat
+import space_database_analysis.examples.makeDatasetInfo
+import space_database_analysis.examples.cdasws_example
 #from space_database_analysis.databaseTools import *
 
 '''
@@ -431,7 +433,9 @@ class Spacecraft:
                 datasetRetrievingName = item[0]
                 variableNamesAndRetrievingNames = item[1:]
                 variableNames = [varRet[0] for varRet in variableNamesAndRetrievingNames]
-                dataset_info = datasets_info[datasetID]
+                dataset_info = datasets_info.get(datasetID)
+                if not dataset_info:
+                    dataset_info = {}
                 dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
                 dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
                 for varName, retName in variableNamesAndRetrievingNames:
@@ -620,7 +624,8 @@ class Dataset:
 
         dataset_file_time_gap_str = dataset_info.get('dataset_file_time_gap')
         if dataset_file_time_gap_str:
-            num, unit = ' '.split(dataset_file_time_gap_str)
+#            logging.info(dataset_file_time_gap_str)
+            num, unit = dataset_file_time_gap_str.split(' ')
             num = int(num)
             if unit == 'hour':
                 unit = timedelta(seconds=3600)
@@ -661,7 +666,7 @@ class Dataset:
             end = start + timedelta(seconds=1)
         criteria = []
         timeTag = None
-        logging.debug("mission: {}".format(self.mission))
+#        logging.debug("mission: {}".format(self.mission))
         if self.mission == 'mms':
             if 'brst' in self.instrumentationPath:
                 searchMethod = 'allFilesInTimeRange'
@@ -742,10 +747,10 @@ class Dataset:
 
     def _get_file_path_from_multiple_resources(self, beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=True, search_online=False, **para):
         search_func = findFileNames
-        search_criteria = self._define_search_criteria(self, beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
+        search_criteria = self._define_search_criteria(beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
         datasetPathInDatabase = self.dataset_info.get('dataset_path')
         if not datasetPathInDatabase:
-            datasetPathInDatabase = os.path.join('_'.split(self.datasetID.lower()))
+            datasetPathInDatabase = os.path.join(self.datasetID.lower().split('_'))
         datasetAbsolutePath = os.path.join(self.databasePath, datasetPathInDatabase)
         filePath = self._get_file_path(datasetAbsolutePath, search_func, **search_criteria)
         if filePath:
