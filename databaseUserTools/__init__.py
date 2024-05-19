@@ -88,6 +88,7 @@ missionInfo = {
             'multispacecraftMission': False},
         }
 
+_epoch_types = ['CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000']
 
 
 class Database:
@@ -382,14 +383,20 @@ class Spacecraft:
         workDataDir: the main database
         workDataDirsBak: a list of paths. In case main database does not contain the wanted data, the program could look for data in these backup database.
     '''
-    def __init__(self, mission=None, name=None, instrumentationAll=None, data=None, dataCleaned=None, workDataDir=None, workDataDirsBak=None, epochType=None):
+    def __init__(self, mission=None, name=None, instrumentationAll=None, data=None, dataCleaned=None, workDataDir=None, workDataDirsBak=None, epoch_type_to_load_data=None):
+        '''
+        epochType: defines the type of epoch to which the epoch in cdf files will be transformed
+
+
+        '''
         self.mission = mission
         self.name = name
         self.instrumentationAll = instrumentationAll
-        if epochType is None:
-            pass
+        self.epoch_type_to_load_data = epoch_type_to_load_data
+#        if epochType is None:
+#            pass
 #           epochType = missionInfo[self.mission]['epochType']
-        self.epochType = epochType
+#        self.epochType = epochType
         if data is None:
             self.data = {}
         elif isinstance(data, dict):
@@ -440,6 +447,13 @@ class Spacecraft:
                 else:
                     dataset = Dataset(datasetID=datasetID, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
                 dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                if self.epoch_type_to_load_data:
+                    for varName in variableNames:
+                        data_type = dataset.varInfoDict[varName]['varInfo'].Data_Type_Description
+                        if data_type in _epoch_types:
+                            if not data_type == self.epoch_type_to_load_data:
+                                para_ = {data_type: dataset.data[varName]}
+                                dataset.data[varName] = dat.Epochs(**para_).get_data(fm=self.epoch_type_to_load_data)
                 for varName, retName in variableNamesAndRetrievingNames:
                     dataset.data[retName] = dataset.data.pop(varName)
                 self.data.update({datasetRetrievingName: dataset.data})
@@ -592,8 +606,6 @@ class Spacecraft:
                 else:
                     pass
                 dic[key] = varData
-
-
 
 
 class Dataset:
@@ -822,7 +834,7 @@ class Dataset:
                 cdfFile = cdflib.CDF(filePath)
                 logging.info('reading data file: {}'.format(filePath))
                 logging.info('datetimeRange: {}'.format(datetimeRange))
-                dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
+                dataMajor, dataAux, varInfoDict = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
                 logging.info('reading data file done: {}'.format(filePath))
                 variablesInADatasetOverDatetimeRange.append(dataMajor)
                 variablesInADatasetIndependantOnTime.append(dataAux)
@@ -836,6 +848,7 @@ class Dataset:
                 assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
         variables.update(variablesInADatasetIndependantOnTime[0])
         self.data = variables
+        self.varInfoDict = varInfoDict
 
     def findDataFiles(self):
         pass
@@ -1393,7 +1406,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None):
             logging.info('isMajorData: '+str(majorData))
             if majorData:
                 if datetimeRange is not None:
-                    epochType = cdfFile.varinq(epochDataName).Data_Type_Description
+                    epochType = varInfoDict[epochDataName]['varInfo'].Data_Type_Description
                     timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
                     varData = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
                     if np.issubdtype(varData.dtype, np.number):
@@ -1410,7 +1423,7 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None):
                     raise Exception('time range is None')
             else:
                 dataAux[var] = cdfFile.varget(var)
-        return dataMajor, dataAux
+        return dataMajor, dataAux, varInfoDict
     else:
         cdfInfo = cdfFile.cdf_info()
         dataFromACdfFile = {}

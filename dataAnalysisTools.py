@@ -15,6 +15,7 @@ import scipy.interpolate as interpolate
 import scipy.special
 import logging
 import spacepy.coordinates as sppcoo
+import matplotlib.axes._axes
 
 
 '''
@@ -486,6 +487,37 @@ def chargedBall2Potential(r, b=1, epsilon=1, a=1):
     innerPotential = const + const * np.log(a/r)
     return (np.sign(r-a)+1)/2*outerPotential + (np.sign(a-r)+1)/2*innerPotential
 
+## plot related
+def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs):
+    '''
+    Time series may contain gap, this function replace the original method plot to better tackle the gaps in plot by not plotting them.
+    Parameters:
+        gap_threshold: two data point with a gap larger than this will not be connected in plot. If this parameter is not given, 5 * minimum gap in time series will be used.
+    '''
+    assert len(args) == 2
+    x = args[0]
+    y = args[1]
+    gap_threshold = kwargs.get('gap_threshold')
+    xdiff = np.diff(x)
+    if gap_threshold:
+        _ = kwargs.pop('gap_threshold')
+    else:
+        gap_threshold = 5*np.min(xdiff)
+    break_points = np.nonzero(xdiff > gap_threshold)[0] + 1
+    break_points = np.insert(break_points, 0, 0)
+    break_points = np.append(break_points, len(x))
+    print(break_points)
+    plots_ = []
+    for ind in range(len(break_points)-1):
+        s_ = slice(*break_points[ind:ind+2])
+        print(s_)
+        x_ = x[s_]
+        y_ = y[s_]
+        plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
+        plots_.append(plot_)
+    return plots_
+
+mpl.axes.Axes.plot_time_series = plot_time_series
 
 
 ## <<<< plot time format
@@ -594,52 +626,106 @@ class Epochs:
         dateTimeList: a list
         epochs: a ndarray
     '''
-    def __init__(self, dateTimeList=None, epochs=None, epochType='CDF_EPOCH'):
+
+    standard_fm ='CDF_TIME_TT2000_components'
+
+    def __init__(self, datetime=None, CDF_EPOCH=None, CDF_TIME_TT2000=None):
         '''
         Parameters:
-            dateTimeList: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance.
-            epochs: a list nested to any degree of depth or a ndarray.
-            epochType: CDF_EPOCH, CDF_TIME_TT2000
+            datetime: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance. This format refers to datetime.datetime
+            CDF_EPOCH: a list nested to any degree of depth or a ndarray.
+            CDF_TIME_TT2000: a list nested to any degree of depth or a ndarray.
         '''
-        datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
-        epoch2datetimeWithEpochType = functools.partial(epoch2datetime, epochType=epochType)
-        self.epochType = epochType
-        if dateTimeList is not None:
-            self.dateTimeList = dateTimeList
-            self.epochs = np.array(map_multi_dimensional_list(datetime2epochWithEpochType, self.dateTimeList))
-        elif epochs is not None:
-            if isinstance(epochs, list):
-                epochs = np.array(epochs)
-            self.epochs = epochs
-            self.dateTimeList = map_multi_dimensional_list(epoch2datetimeWithEpochType, epochs.tolist())
+        self.data = {}
+        self.data['datetime'] = datetime
+        self.data['CDF_EPOCH'] = CDF_EPOCH
+        self.data['CDF_TIME_TT2000'] = CDF_TIME_TT2000
+        for data_format, data in self.data.items():
+            if data is not None:
+                components = Epochs.breakdown(data=data, fm=data_format)
+                self.standard_data = components
+                break
 
-    def to_epochs(self, epochType='CDF_TIME_TT2000'):
-        '''
-        transform to other format of epochs
-        '''
-        datetimes = cdflib.epochs.CDFepoch.to_datetime(self.epochs)
-        if epochType == 'CDF_TIME_TT2000':
-            epochs = cdflib.epochs.CDFepoch.compute_tt2000(datetimes)
-        return epochs
+#        datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
+#        epoch2datetimeWithEpochType = functools.partial(epoch2datetime, epochType=epochType)
+#        self.epochType = epochType
+#        if dateTimeList is not None:
+#            self.dateTimeList = dateTimeList
+#            self.epochs = np.array(map_multi_dimensional_list(datetime2epochWithEpochType, self.dateTimeList))
+#        elif epochs is not None:
+#            if isinstance(epochs, list):
+#                epochs = np.array(epochs)
+#            self.epochs = epochs
+#            self.dateTimeList = map_multi_dimensional_list(epoch2datetimeWithEpochType, epochs.tolist())
 
-    def epochRecords(self, ts, tolerance=1):
+    @classmethod
+    def breakdown(cls, data, fm):
+        if fm == 'CDF_EPOCH':
+            components = cdflib.epochs.CDFepoch.breakdown_epoch(data)
+        elif fm == 'CDF_TIME_TT2000':
+            components = cdflib.epochs.CDFepoch.breakdown_tt2000(data)
+        elif fm == 'datetime':
+            epochType = ('_').join(cls.standard_fm.split('_')[:-1])
+            components = ot.datetime2list(data, epochType=epochType)
+        return components
+
+    @staticmethod
+    def compute(components, fm):
+        if fm == 'CDF_EPOCH':
+            data = cdflib.epochs.CDFepoch.compute_epoch(components)
+        elif fm == 'CDF_TIME_TT2000':
+            data = cdflib.epochs.CDFepoch.compute_tt2000(components)
+        elif fm == 'datetime':
+            data = [datetime(*components_[:6]) for components_ in components]
+        return data
+
+    def get_data(self, fm=None):
+        if fm:
+            if self.data[fm] is not None:
+                pass
+            else:
+                self.data[fm] = self.compute(self.standard_data, fm)
+        else:
+            fm = self.standard_fm
+        return self.data[fm]
+
+    def epochRecords(self, ts, fm='CDF_EPOCH', tolerance=1):
         '''
+        Purposes:
+            ts is a epoch series, this method finds the indices of the epoch series where the values are closest to the epochs in the Epochs object.
         Parameters:
             ts: a ndarray [..., timeIndex]
             tolerance (in second): the maximal allowed difference between t[record] and self.epoch
         '''
-        epochs = self.epochs
+        epochs = self.get_data(fm=fm)
         records = np.argmin(np.abs(ts - epochs[..., None]), axis=-1)
-        if self.epochType == 'CDF_EPOCH':
+        if fm == 'CDF_EPOCH':
             if np.all(np.abs(ts[..., records] - epochs) < tolerance*1000):
                 return records
             else:
                 raise Exception("records not found")
-        if self.epochType == 'CDF_TIME_TT2000':
+        if fm == 'CDF_TIME_TT2000':
             if np.all(np.abs(ts[..., records] - epochs) < tolerance*10**9):
                 return records
             else:
                 raise Exception("records not found")
+
+    def findepochrange(self, fm='datetime', start_time=None, end_time=None):
+        for fm_local, data in self.data.items():
+            if data:
+                ts = []
+                if start_time:
+                    ts.append(start_time)
+                if end_time:
+                    ts.append(end_time)
+                para = {fm: ts}
+                epochs = Epochs(**para)
+                ts_local = epochs.get_data(fm_local)
+                if end_time:
+                    end_time = ts_local.pop()
+                if start_time:
+                    start_time = ts_local.pop()
+                return cdflib.epochs.CDFepoch.findepochrange(data, start_time, end_time)
 
 
 def map_multi_dimensional_list(func, l):
@@ -1317,6 +1403,8 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
     return plot_
 
 
+
+
 def standardizePhaseSpaceDensity(f, theta, phi, energyTable):
     '''
     Purpose:
@@ -1586,9 +1674,9 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None):
     if label:
         labels = [labelF.format(label) for labelF in labelsF]
     for ind in range(3):
-        ax.plot(t, data[:, ind], color=colors[ind], label=labels[ind])
+        ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind])
     if norm:
-        ax.plot(t, np.linalg.norm(data, axis=-1), color='k', label=label)
+        ax.plot_time_series(t, np.linalg.norm(data, axis=-1), color='k', label=label)
     ax.set_ylabel(label)
     ax.grid(True)
     return ax
@@ -1737,5 +1825,6 @@ def quaternionMultiply(qs, scalarPos='last'):
            q = quaternionMultiply((q1, q2))
        return q
     else: raise Exception
+
 
 #np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)
