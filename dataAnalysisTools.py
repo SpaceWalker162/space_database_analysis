@@ -616,9 +616,10 @@ class Epochs:
     def to_epochs(self, epochType='CDF_TIME_TT2000'):
         '''
         transform to other format of epochs
-
         '''
-
+        datetimes = cdflib.epochs.CDFepoch.to_datetime(self.epochs)
+        if epochType == 'CDF_TIME_TT2000':
+            epochs = cdflib.epochs.CDFepoch.compute_tt2000(datetimes)
         return epochs
 
     def epochRecords(self, ts, tolerance=1):
