@@ -10,7 +10,7 @@ import logging
 from wolframclient.language import wl
 import wolframclient
 from wolframclient.evaluation import WolframLanguageSession
-import dataAnalysisTools as dat
+import space_database_analysis.dataAnalysisTools as dat
 
 
 class BowShockPositionModel:
