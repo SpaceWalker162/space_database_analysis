@@ -506,11 +506,9 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     break_points = np.nonzero(xdiff > gap_threshold)[0] + 1
     break_points = np.insert(break_points, 0, 0)
     break_points = np.append(break_points, len(x))
-    print(break_points)
     plots_ = []
     for ind in range(len(break_points)-1):
         s_ = slice(*break_points[ind:ind+2])
-        print(s_)
         x_ = x[s_]
         y_ = y[s_]
         plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
@@ -562,6 +560,16 @@ def format_minTT2000(t, pos=None):
 def format_hourMinTT2000(t, pos=None):
     return cdflib.cdfepoch.encode(int(t))[14:21]
 
+def format_doy(t, pos=None):
+    '''day of year'''
+    epochs = Epochs(CDF_EPOCH=t)
+    return epochs.get_data('datetime').strftime('%j')
+
+def format_doyThour(t, pos=None):
+    '''day of year'''
+    epochs = Epochs(CDF_EPOCH=t)
+    return epochs.get_data('datetime').strftime('%jT%H')
+
 monthFormatter = FuncFormatter(format_month)
 monthFormatterTT2000 = FuncFormatter(format_monthTT2000)
 dayFormatter = FuncFormatter(format_day)
@@ -573,6 +581,8 @@ hourFormatterTT2000 = FuncFormatter(format_hourTT2000)
 minFormatter = FuncFormatter(format_min)
 minFormatterTT2000 = FuncFormatter(format_minTT2000)
 hourMinFormatterTT2000 = FuncFormatter(format_hourMinTT2000)
+doyFormatter = FuncFormatter(format_doy)
+doyThourFormatter = FuncFormatter(format_doyThour)
 
 ## plot time format >>>>
 
@@ -676,7 +686,11 @@ class Epochs:
         elif fm == 'CDF_TIME_TT2000':
             data = cdflib.epochs.CDFepoch.compute_tt2000(components)
         elif fm == 'datetime':
-            data = [datetime(*components_[:6]) for components_ in components]
+            if len(components.shape) == 1:
+                data = datetime(*components[:6])
+            elif len(components.shape) == 2:
+                data = [datetime(*components_[:6]) for components_ in components]
+            else: raise Exception('wrong input of components')
         return data
 
     def get_data(self, fm=None):
@@ -1668,15 +1682,15 @@ def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
     ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     return ssqBasisInICRFBasis
 
-def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None):
+def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     labelsF = ['${}_x$', '${}_y$', '${}_z$']
     colors = ['m', 'g', 'b']
     if label:
         labels = [labelF.format(label) for labelF in labelsF]
     for ind in range(3):
-        ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind])
+        ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
     if norm:
-        ax.plot_time_series(t, np.linalg.norm(data, axis=-1), color='k', label=label)
+        ax.plot_time_series(t, np.linalg.norm(data, axis=-1), color='k', label=label, **kwargs)
     ax.set_ylabel(label)
     ax.grid(True)
     return ax
