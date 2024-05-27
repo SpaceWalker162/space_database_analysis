@@ -3,6 +3,7 @@ __author__ = 'Yufei Zhou'
 import numpy as np
 import cdflib    # see github.com/MAVENSDC/cdflib
 import space_database_analysis.otherTools as ot
+import space_database_analysis.databaseUserTools as dut
 import functools
 import matplotlib as mpl
 from datetime import datetime
@@ -37,6 +38,84 @@ mass_proton = 1.6726 * 10**(-27)
 mass_electron = 9.11 * 10**(-31)
 
 eV = 1.602176634 * 10**(-19)
+
+class mms:
+    def __init__(self, spacecrafts=None, workDataDir=None, workDataDirsBak=None):
+        if spacecrafts:
+            self.spacecrafts = spacecrafts
+        else:
+            missionName = 'mms'
+            spacecraftNames = ['mms'+str(i) for i in range(1,5)]
+            spacecrafts = []
+            for spacecraftName in spacecraftNames:
+                spacecraft = dut.Spacecraft(mission=missionName, name=spacecraftName, workDataDir=workDataDir, workDataDirsBak=workDataDirsBak)
+                spacecrafts.append(spacecraft)
+            self.spacecrafts = spacecrafts
+        self.data = {}
+
+    def chargeCalculation(self, datetimeRange, **kwargs):
+        for spacecraft in self.spacecrafts:
+            spacecraftName = spacecraft.name
+            datasets_variables_with_retrieving_names = {
+                (spacecraftName+'_edp_fast_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_fast_l2', 't'), (spacecraftName+'_edp_dce_gse_fast_l2', 'E'), (spacecraftName+'_edp_dce_dsl_fast_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_fast_l2', 'E_err')],
+                (spacecraftName+'_mec_srvy_l2_epht89q').upper(): ['MEC89Q', ('Epoch', 't'), (spacecraftName+'_mec_r_gse', 'xGSE'), (spacecraftName+'_mec_v_gse', 'vGSE'), (spacecraftName+'_mec_quat_eci_to_dsl', 'quat_eci_to_dsl'), (spacecraftName+'_mec_quat_eci_to_gse', 'quat_eci_to_gse')],
+                }
+            spacecraft.loadData(datetimeRange=datetimeRange, datasets_variables_with_retrieving_names=datasets_variables_with_retrieving_names, **kwargs)
+            quat_dsl_to_gse = sppcoo.quaternionMultiply(sppcoo.quaternionConjugate(spacecraft.data['MEC89Q']['quat_eci_to_dsl']), spacecraft.data['MEC89Q']['quat_eci_to_gse'])
+            spacecraft.data['MEC89Q']['quat_dsl_to_gse'] = quat_dsl_to_gse
+        data = self.chargeCalculationWithDataLoaded(self.spacecrafts)
+        self.data.update(data)
+
+
+    @staticmethod
+    def chargeCalculationWithDataLoaded(spacecrafts):
+        numberOfSpacecrafts = len(spacecrafts)
+        source = 'EDP'
+        numberOfPointsList = np.zeros(numberOfSpacecrafts)
+        for indOfSC in range(numberOfSpacecrafts):
+            numberOfPointsList[indOfSC] = len(spacecrafts[indOfSC].data[source]['t'])
+        standardSCInd = np.argmin(numberOfPointsList)
+        otherSCInds = np.delete(np.arange(numberOfSpacecrafts), standardSCInd)
+        resamplingT = spacecrafts[standardSCInd].data[source]['t']
+        EAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
+        EAllSpacecrafts[:, standardSCInd, :] = spacecrafts[standardSCInd].data[source]['E']
+        for indOfSC in otherSCInds:
+            E_ = spacecrafts[indOfSC].data[source]['E']
+            t_ = spacecrafts[indOfSC].data[source]['t']
+            EAllSpacecrafts[:, indOfSC, :] = dataFillAndLowPass(t_, E_, resamplingT=resamplingT)
+        EErrAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
+        EErrAllSpacecrafts[:, standardSCInd, :] = spacecrafts[standardSCInd].data[source]['E_err']
+        for indOfSC in otherSCInds:
+            E_ = spacecrafts[indOfSC].data[source]['E_err']
+            t_ = spacecrafts[indOfSC].data[source]['t']
+            EErrAllSpacecrafts[:, indOfSC, :] = dataFillAndLowPass(t_, E_, resamplingT=resamplingT)
+        source = 'MEC89Q'
+        dataAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
+        for indOfSC in range(numberOfSpacecrafts):
+            data_ = spacecrafts[indOfSC].data[source]['xGSE']
+            t_ = spacecrafts[indOfSC].data[source]['t']
+            dataAllSpacecrafts[:, indOfSC, :] = dataFillAndLowPass(t_, data_, resamplingT=resamplingT)
+        xGSEAllSpacecrafts = dataAllSpacecrafts
+        xGSEConstellationCenter = np.mean(xGSEAllSpacecrafts, axis=-2)
+        xGSEAllSpacecraftsInConstellationCenter = xGSEAllSpacecrafts - xGSEConstellationCenter[..., None, :]
+        print('approximating...')
+        coeff = leastSquarePolynomialApproximation(j=EAllSpacecrafts, x=xGSEAllSpacecraftsInConstellationCenter, d=1, omega=None, regularizationMethod=None, regPara=None, solver='direct')
+        print('approximated')
+        timingShape = volumetricAnalysis(xGSEAllSpacecrafts)
+        gradE = coeff[:, 1:, :]
+        rho = np.trace(gradE, axis1=-1, axis2=-2) * 55.2636 # in unit of e/m^3
+        EErrAverageOverAllSpacecrafts = np.mean(EErrAllSpacecrafts, axis=-2)
+        print('estimating errors...')
+        gradEErr = leastSquarePolynomialApproximationErrorEstimation(x=xGSEAllSpacecraftsInConstellationCenter, d=1, omega=None, dj=EErrAverageOverAllSpacecrafts)
+        print('estimated')
+        rhoErr = np.linalg.norm(np.diagonal(gradEErr[:, 1:], axis1=-2, axis2=-1), axis=-1) * 55.2636 # in unit of e/m^3
+        data = {}
+        data['rho'] = rho
+        data['rhoErr'] = rhoErr
+        data['resamplingT'] = resamplingT
+        data['timingShape'] = timingShape[0][:, -1]/timingShape[0][:, 0]
+        data['x_gse'] = xGSEConstellationCenter
+        return data
 
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
