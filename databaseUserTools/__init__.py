@@ -436,7 +436,7 @@ class Spacecraft:
             self.data.update({instrumentationRetrivingName: dataFromACdfFile})
         else:
             assert datasets_variables_with_retrieving_names
-            datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak)
+            datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak, copy_if_not_exist=copy_if_not_exist)
             for datasetID, item in datasets_variables_with_retrieving_names.items():
                 datasetRetrievingName = item[0]
                 variableNamesAndRetrievingNames = item[1:]
@@ -609,7 +609,7 @@ class Spacecraft:
 
 
 class Dataset:
-    def __init__(self, datasetID=None, dataset_info=None, databasePath=None, databaseBakPaths=None):
+    def __init__(self, datasetID=None, dataset_info=None, databasePath=None, databaseBakPaths=None, copy_if_not_exist=True):
         '''
         Expected database directory:
             database:
@@ -629,7 +629,7 @@ class Dataset:
         else:
             assert datasetID
             self.datasetID = datasetID
-            datasets_info = loadDatasets_info(self.databasePath, self.databaseBakPaths)
+            datasets_info = loadDatasets_info(self.databasePath, self.databaseBakPaths, copy_if_not_exist=copy_if_not_exist)
             self.dataset_info = datasets_info.get(datasetID, {})
 
         dataset_file_time_gap_str = self.dataset_info.get('dataset_file_time_gap')
