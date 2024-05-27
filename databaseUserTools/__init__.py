@@ -654,7 +654,7 @@ class Dataset:
         if isinstance(self.dataset_file_time_gap, timedelta):
             if self.dataset_file_time_gap == timedelta(days=1):
                 beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day)
-                endOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day+1)
+                endOfTheFilePeriod = beginOfTheFilePeriod + timedelta(days=1)
             elif self.dataset_file_time_gap < timedelta(days=1):
                 beginOfTheDay = datetime(dateTime.year, dateTime.month, dateTime.day)
                 completePeriodBefore = (dateTime - beginOfTheDay)//self.dataset_file_time_gap
