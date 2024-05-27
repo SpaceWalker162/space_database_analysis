@@ -840,15 +840,18 @@ class Dataset:
                 variablesInADatasetIndependantOnTime.append(dataAux)
             start_ = endOfTheFilePeriod
         variables = {}
-        for var in variablesInADatasetOverDatetimeRange[0].keys():
-            variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
-        for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
-            logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
-            for key in variablesInADatasetIndependantOnTime[fileInd].keys():
-                assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
-        variables.update(variablesInADatasetIndependantOnTime[0])
-        self.data = variables
-        self.varInfoDict = varInfoDict
+        if len(variablesInADatasetOverDatetimeRange) > 0:
+            for var in variablesInADatasetOverDatetimeRange[0].keys():
+                variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+            for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
+                logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
+                for key in variablesInADatasetIndependantOnTime[fileInd].keys():
+                    assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+            variables.update(variablesInADatasetIndependantOnTime[0])
+            self.data = variables
+            self.varInfoDict = varInfoDict
+        else:
+            logging.warning('no data found for this load of dataset')
 
     def findDataFiles(self):
         pass
