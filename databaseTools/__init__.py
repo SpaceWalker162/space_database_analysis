@@ -62,16 +62,19 @@ class Database:
             if os.path.exists(additional_datasets_info_file_path):
                 self.additional_datasets_info_paths.append(additional_datasets_info_file_path)
 
-
-    def removeOutdatedFiles(self):
+    @classmethod
+    def removeOutdatedFiles(cls, databasePaths, verbose=False):
         '''
         Purpose: SPDF from time to time updates the version of data files. Therefore in the database there could be multiple files being multiple versions of the same data. This function removes the files of older version if a newer version presents in the database.
         '''
-        outdatedFilePaths = self.getOutdatedFilePaths()
+        outdatedFilePaths = cls.getOutdatedFilePaths(databasePaths, verbose=verbose)
+        print(outdatedFilePaths)
         for filePath in outdatedFilePaths:
             os.remove(filePath)
+            logging.info('removed: {}'.format(filePath))
 
-    def getOutdatedFilePaths(self, verbose=False):
+    @staticmethod
+    def getOutdatedFilePaths(databasePaths, verbose=False):
         def getVersionFromFileName(fileName):
             '''
             Expected file name format example: bedatkjo-wekjfjk_jehwoi_jhfiwu10398_39823_v2.1.2.cdf
@@ -95,8 +98,9 @@ class Database:
             return tuple(para[:-4])
 
         outdatedFilePaths = []
-        for databaseDir in self.paths:
-            dataDir = os.path.join(databaseDir, 'data')
+        for databaseDir in databasePaths:
+#            dataDir = os.path.join(databaseDir, 'data')
+            dataDir = databaseDir
             fileInfoDict = readFileInfoRecursively(path=dataDir, verbose=verbose, facts=None)
             dirKeys = set(ot.doAtLeavesOfADict(dic=fileInfoDict, do=getDirDic))
             for ind, dirKey in enumerate(dirKeys):
