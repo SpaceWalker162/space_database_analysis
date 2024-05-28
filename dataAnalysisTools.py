@@ -17,7 +17,6 @@ import scipy.special
 import logging
 import spacepy.coordinates as sppcoo
 import matplotlib.axes._axes
-import geopack
 
 
 '''
@@ -59,10 +58,13 @@ class mms:
         for spacecraft in self.spacecrafts:
             spacecraftName = spacecraft.name
             datasets_variables_with_retrieving_names = {
-                (spacecraftName+'_edp_'+mode+'_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_'+mode+'_l2', 't'), (spacecraftName+'_edp_dce_gse_'+mode+'_l2', 'E'), (spacecraftName+'_edp_dce_dsl_'+mode+'_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_'+mode+'_l2', 'E_err')],
+                (spacecraftName+'_edp_'+mode+'_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_'+mode+'_l2', 't'), (spacecraftName+'_edp_dce_gse_'+mode+'_l2', 'E'), (spacecraftName+'_edp_dce_dsl_'+mode+'_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_'+mode+'_l2', 'E_err'), (spacecraftName+'_edp_quality_'+mode+'_l2', 'quality')],
                 (spacecraftName+'_mec_srvy_l2_epht89q').upper(): ['MEC89Q', ('Epoch', 't'), (spacecraftName+'_mec_r_gse', 'xGSE'), (spacecraftName+'_mec_v_gse', 'vGSE'), (spacecraftName+'_mec_quat_eci_to_dsl', 'quat_eci_to_dsl'), (spacecraftName+'_mec_quat_eci_to_gse', 'quat_eci_to_gse')],
                 }
             spacecraft.loadData(datetimeRange=datetimeRange, datasets_variables_with_retrieving_names=datasets_variables_with_retrieving_names, **kwargs)
+            source = 'EDP'
+            quality_mask = spacecraft.data[source]['quality'] > 1
+            spacecraft.data[source] = mask_dict_of_ndarray(spacecraft.data[source], quality_mask)
             quat_dsl_to_gse = sppcoo.quaternionMultiply(sppcoo.quaternionConjugate(spacecraft.data['MEC89Q']['quat_eci_to_dsl']), spacecraft.data['MEC89Q']['quat_eci_to_gse'])
             spacecraft.data['MEC89Q']['quat_dsl_to_gse'] = quat_dsl_to_gse
         data = self.chargeCalculationWithDataLoaded(self.spacecrafts)
@@ -73,24 +75,12 @@ class mms:
     def chargeCalculationWithDataLoaded(spacecrafts):
         numberOfSpacecrafts = len(spacecrafts)
         source = 'EDP'
-        numberOfPointsList = np.zeros(numberOfSpacecrafts)
-        for indOfSC in range(numberOfSpacecrafts):
-            numberOfPointsList[indOfSC] = len(spacecrafts[indOfSC].data[source]['t'])
-        standardSCInd = np.argmin(numberOfPointsList)
-        otherSCInds = np.delete(np.arange(numberOfSpacecrafts), standardSCInd)
-        resamplingT = spacecrafts[standardSCInd].data[source]['t']
-        EAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
-        EAllSpacecrafts[:, standardSCInd, :] = spacecrafts[standardSCInd].data[source]['E']
-        for indOfSC in otherSCInds:
-            E_ = spacecrafts[indOfSC].data[source]['E']
-            t_ = spacecrafts[indOfSC].data[source]['t']
-            EAllSpacecrafts[:, indOfSC, :] = dataFillAndLowPass(t_, E_, resamplingT=resamplingT)
-        EErrAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
-        EErrAllSpacecrafts[:, standardSCInd, :] = spacecrafts[standardSCInd].data[source]['E_err']
-        for indOfSC in otherSCInds:
-            E_ = spacecrafts[indOfSC].data[source]['E_err']
-            t_ = spacecrafts[indOfSC].data[source]['t']
-            EErrAllSpacecrafts[:, indOfSC, :] = dataFillAndLowPass(t_, E_, resamplingT=resamplingT)
+        data_list = [np.concatenate((spacecraft.data[source]['E'], spacecraft.data[source]['E_err']), axis=-1) for spacecraft in spacecrafts]
+        t_list = [spacecraft.data[source]['t'] for spacecraft in spacecrafts]
+        resamplingT, synchronized_data = data_synchronization(data_list, t_list)
+        EAllSpacecrafts = synchronized_data[..., :3]
+        EErrAllSpacecrafts = synchronized_data[..., 3:]
+
         source = 'MEC89Q'
         dataAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
         for indOfSC in range(numberOfSpacecrafts):
@@ -148,6 +138,33 @@ def moving_average(data, n=1, axis=0):
         ret = np.swapaxes(ret, axis, 0)
     return ret
 
+def data_synchronization(data_list, t_list, minimum_gap_ratio=1.5, minimum_gap_abs=None):
+    '''
+    Purpose:
+        pass
+    '''
+    resamplingT = define_synchronized_t(t_list=t_list, minimum_gap_ratio=minimum_gap_ratio, minimum_gap_abs=minimum_gap_abs)
+    data_array = np.zeros((len(resamplingT), len(data_list), *data_list[0].shape[1:]))
+    for data_ind, data in enumerate(data_list):
+        t = t_list[data_ind]
+        data_array[:, data_ind] = dataFillAndLowPass(t, data, resamplingT=resamplingT)
+    return resamplingT, data_array
+
+def define_synchronized_t(t_list, minimum_gap_ratio=1.5, minimum_gap_abs=None):
+    stdInd = np.argmin(np.array([len(t) for t in t_list]))
+    if not minimum_gap_abs:
+        stdT = t_list[stdInd]
+        minimum_gap_abs = np.min(np.diff(stdT))*minimum_gap_ratio
+    for t_list_ind, t in enumerate(t_list):
+        if t_list_ind == stdInd:
+            continue
+        pos = np.searchsorted(t, stdT)
+        pos[pos == len(t)] = 0
+        left = np.abs(stdT - t[pos-1])
+        right = np.abs(t[pos] - stdT)
+        diff_ = np.concatenate((left[:, None], right[:, None]), axis=-1)
+        stdT = stdT[np.min(diff_, axis=-1) < minimum_gap_abs]
+    return stdT
 
 def mvab(bVectors, returnStatisticalError=False, errorEstimation='analytical'):
     '''
@@ -847,7 +864,7 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
                 original: return the original input t and the data such that the bad points are replaced with linear interpolation.
 
         parameters associated with "evenlySpaced":
-            tStepPecentageCriterion: the portion of major temporal gap should be larger than this parameter, otherwise the program raise exception.
+            tStepPecentageCriterion: In the general case of irregually epoch records, there are multiple possible time steps between consecutive records. The portion of the most frequent temporal step in all occurance of all time steps should be larger than this parameter, otherwise the program raise exception.
             lowpassCutoff: lowpass cutoff frequency.
             gapThreshold: a number. The t is divided into blocks of t such that the gap between consecutive blocks is larger than gapThreshold.
             minNumberOfPoints: the minimum number of points in every block.
@@ -897,8 +914,9 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
                         else:
                             shiftQ = True
                         tHomogeneous = np.arange(t[0], t[-1], tStep)
-                        cs = interpolate.CubicSpline(tBlock, dataBlock, axis=axis)
-                        dataBlockHomogeneous = cs(tHomogeneous)
+#                        cs = interpolate.CubicSpline(tBlock, dataBlock, axis=axis)
+#                        dataBlockHomogeneous = cs(tHomogeneous)
+                        dataBlockHomogeneous = linear_interpolate_array(tHomogeneous, tBlock, dataBlock, axis=axis)
                     else:
                         print('tStep: {}'.format(tStep))
                         print('unique:')
@@ -957,9 +975,30 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
     else:
         logging.debug('t shape: {}'.format(t.shape))
         logging.debug('data shape: {}'.format(data.shape))
-        cs = interpolate.CubicSpline(t, data, axis=axis)
-        resampledData = cs(resamplingT)
+#        cs = interpolate.CubicSpline(t, data, axis=axis)
+#        resampledData = cs(resamplingT)
+        resampledData = linear_interpolate_array(resamplingT, t, data, axis=axis)
         return resampledData
+
+
+def linear_interpolate_array(x, xp, array, axis=0):
+    '''
+    Parameters:
+        axis: the axis of the array for coordinate x 
+    '''
+    assert len(xp) == array.shape[axis]
+    if axis != 0:
+        array = array.swapaxes(axis, 0)
+    shape_swaped = array.shape
+    numberOfFunctions = np.prod(array.shape[1:])
+    array = array.reshape((len(xp), numberOfFunctions))
+    y = np.zeros((len(x), numberOfFunctions))
+    for ind in range(array.shape[1]):
+        y[:, ind] = np.interp(x, xp, array[:, ind])
+    y = y.reshape((len(x), *shape_swaped[1:]))
+    if axis != 0:
+        y = y.swapaxes(axis, 0)
+    return y
 
 
 def fillData(t, data):
@@ -1931,5 +1970,10 @@ def quaternionMultiply(qs, scalarPos='last'):
        return q
     else: raise Exception
 
+def mask_dict_of_ndarray(dic, mask):
+    dic_new = {}
+    for key, item in dic.items():
+        dic_new[key] = item[mask]
+    return dic_new
 
 #np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)

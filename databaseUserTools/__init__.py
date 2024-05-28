@@ -1388,7 +1388,9 @@ def readData(workDataDir, datasetsAndVariables, datetimeRange, epochType='CDF_EP
     return variablesAllDataset
 
 ##
-def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None):
+def readDataFromACdfFile(cdfFile=None, variables=None, datetimeRange=None, cdf_file_path=None):
+    if not cdfFile:
+        cdfFile = cdflib.CDF(cdf_file_path)
     if variables:
         varInfo, varInfoDict = readCDFInfo(cdfFile)
         epochDataInd = 0 # in most cases, epoch is the first zVariable
@@ -1401,12 +1403,12 @@ def readDataFromACdfFile(cdfFile, variables=None, datetimeRange=None):
             depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
             logging.info('depend0: '+ str(depend0))
             if depend0 is None:
-                if varInfo[epochDataInd]['varInfo'].Variable == var:
+                if varInfoDict[var]['varInfo'].Data_Type_Description in  _epoch_types:
                     epochDataName = var
                 else:
                     majorData = False
             else:
-                assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
+#                assert depend0 == varInfo[epochDataInd]['varInfo'].Variable
                 epochDataName = depend0
             logging.info('isMajorData: '+str(majorData))
             if majorData:
