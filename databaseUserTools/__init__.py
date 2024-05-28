@@ -852,6 +852,8 @@ class Dataset:
             self.varInfoDict = varInfoDict
         else:
             logging.warning('no data found for this load of dataset')
+            self.data = {}
+            self.varInfoDict = {}
 
     def findDataFiles(self):
         pass

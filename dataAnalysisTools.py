@@ -17,6 +17,7 @@ import scipy.special
 import logging
 import spacepy.coordinates as sppcoo
 import matplotlib.axes._axes
+import geopack
 
 
 '''
@@ -38,6 +39,7 @@ mass_proton = 1.6726 * 10**(-27)
 mass_electron = 9.11 * 10**(-31)
 
 eV = 1.602176634 * 10**(-19)
+magnetic_permeability_in_vacuum = 4*np.pi*10**(-7)
 
 class mms:
     def __init__(self, spacecrafts=None, workDataDir=None, workDataDirsBak=None):
@@ -53,11 +55,11 @@ class mms:
             self.spacecrafts = spacecrafts
         self.data = {}
 
-    def chargeCalculation(self, datetimeRange, **kwargs):
+    def chargeCalculation(self, datetimeRange, mode='fast', **kwargs):
         for spacecraft in self.spacecrafts:
             spacecraftName = spacecraft.name
             datasets_variables_with_retrieving_names = {
-                (spacecraftName+'_edp_fast_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_fast_l2', 't'), (spacecraftName+'_edp_dce_gse_fast_l2', 'E'), (spacecraftName+'_edp_dce_dsl_fast_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_fast_l2', 'E_err')],
+                (spacecraftName+'_edp_'+mode+'_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_'+mode+'_l2', 't'), (spacecraftName+'_edp_dce_gse_'+mode+'_l2', 'E'), (spacecraftName+'_edp_dce_dsl_'+mode+'_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_'+mode+'_l2', 'E_err')],
                 (spacecraftName+'_mec_srvy_l2_epht89q').upper(): ['MEC89Q', ('Epoch', 't'), (spacecraftName+'_mec_r_gse', 'xGSE'), (spacecraftName+'_mec_v_gse', 'vGSE'), (spacecraftName+'_mec_quat_eci_to_dsl', 'quat_eci_to_dsl'), (spacecraftName+'_mec_quat_eci_to_gse', 'quat_eci_to_gse')],
                 }
             spacecraft.loadData(datetimeRange=datetimeRange, datasets_variables_with_retrieving_names=datasets_variables_with_retrieving_names, **kwargs)
@@ -1339,6 +1341,16 @@ def leastSquarePolynomialApproximationErrorEstimation(x, d, omega=None, dj=None)
     dg = np.linalg.norm(RInverse @ np.swapaxes(vandermondeMatrix, -1, -2) @ omega, axis=-1)[..., None] * dj[..., None, :]
     return dg
 
+def linearGradient(j, x, d, omega=None, regularizationMethod=None, regPara=None, solver='direct', numberOfIterations=1000):
+    xMean = np.mean(x, axis=-2)
+    x = x - xMean[..., None, :]
+    coeff = leastSquarePolynomialApproximation(j, x, d=1, omega=omega)
+    return coeff[..., 1:4, :]
+
+def curl(j, x, d, omega=None):
+    gradients = linearGradient(j, x, d, omega=omega)
+    leviCivitaTensor = makeLeviCivitaTensor()
+    return np.sum(np.sum(gradients[..., None] * leviCivitaTensor[None, ...], axis=-3), axis=-2)
 
 def lsIterate(R, J, c, hBlock, d):
     h = c.shape[-1]
