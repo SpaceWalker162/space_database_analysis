@@ -22,17 +22,20 @@ spacecraftNames = []
 mmsNumbers = [1]
 for mmsNumber in mmsNumbers:
     spacecraftNames.append(missionName+str(mmsNumber))
+
 #for i in range(4):
 #    spacecraftNames.append(missionName+str(i+1))
 #instrumentations = [['fpi', 'fast', 'l2', 'dis-moms'], ['fpi', 'brst', 'l2', 'dis-moms']]
 #instrumentations = [['mec', 'srvy', 'l2', 'epht89q'], ['mec', 'srvy', 'l2', 'epht89d']]
 #instrumentations = [['fgm', 'srvy', 'l2']]
 #instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
-instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
-dataNameDict = {missionName: {}}
-directory = ot.Directory(lis=instrumentations)
-directory.generate_dic_from_lis()
-instrumentationsDict = directory.dic
+#instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
+
+#directory = ot.Directory(lis=instrumentations)
+#directory.generate_dic_from_lis()
+#instrumentationsDict = directory.dic
+
+instrumentationsDict = {'feeps': {'srvy': {'l2': {'ion': {'2015':{}, '2016':{}, '2017': {}, '2018': {}}}}}}
 for spacecraftName in spacecraftNames:
     dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 #
