@@ -40,6 +40,7 @@ import space_database_analysis.examples.cdasws_example
 [A, B] means both A and B
 '''
 
+_mms_edp_bitmask = np.array([0, 1, 0, 1, 1, 1, 2, 0, 2, 1, 2, 0]) # see Section 11.5.1 Bitmasks and Quality Flgs, Calibration and Measurement Algorithms Document for MMS Project
 
 multispacecraftMissions = ['cluster', 'mms', 'themis']
 piledInstrumentation = ['5VPS', 'CIS']
@@ -170,6 +171,7 @@ class Spacecraft:
             self.data = data
         else:
             raise Exception('wrong data input format')
+        self.metadata = {}
         if dataCleaned is None:
             self.dataCleaned = {}
         elif isinstance(dataCleaned, dict):
@@ -179,7 +181,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, datasets_variables_with_retrieving_names=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, search_online=False, fromFile=None, useMask=False, maskValue=-1.0*10**30):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, datasets_variables_with_retrieving_names=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, search_online=False, fromFile=None, useMask=False, maskValue=-1.0*10**30, sparse_factor=None):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -189,6 +191,7 @@ class Spacecraft:
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
             datasets_variables_with_retrieving_names: a dictionary of datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'MMS1_FGM_SRVY_L2': ['FGM', ('Epoch', 't'), ('mms1_fgm_srvy_l2_bvec_gse', 'B')], 'MMS2_FPI_FAST_L2_DIS-MOMS': ['fgmBrst', ('Epoch', 't'), ('mms2_fpi_fast_l2_dis-moms_density', 'n')]}. Please note that 'Epoch' and 'Btotal' are improvised. To retrieve data 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
             fromFile: to load data from a file, the file name is given by this parameter.
+            sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
         Note:
             Necessary parameters include: <fromFile, [datetimeRange, <[<[instrumentation, variables], datasetsAndVariables>, instrumentationRetrivingName, variableRetrivingNames], instrumentationVariablesWithRetrivingName>]>
             To retrieve data, use Spacecraft.data[instrumentationName][variableRetrivingName]
@@ -213,7 +216,7 @@ class Spacecraft:
                     dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
                 else:
                     dataset = Dataset(datasetID=datasetID, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
-                dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, sparse_factor=sparse_factor)
                 if self.epoch_type_to_load_data:
                     for varName in variableNames:
                         data_type = dataset.varInfoDict[varName]['varInfo'].Data_Type_Description
@@ -222,8 +225,10 @@ class Spacecraft:
                                 para_ = {data_type: dataset.data[varName]}
                                 dataset.data[varName] = dat.Epochs(**para_).get_data(fm=self.epoch_type_to_load_data)
                 for varName, retName in variableNamesAndRetrievingNames:
-                    dataset.data[retName] = dataset.data.pop(varName)
+                    dataset.data[retName] = dataset.data.get(varName)
+                    dataset.varInfoDict[retName] = dataset.varInfoDict.get(varName)
                 self.data.update({datasetRetrievingName: dataset.data})
+                self.metadata.update({datasetRetrievingName: dataset.varInfoDict})
             if cleanData:
                 self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
@@ -581,7 +586,11 @@ class Dataset:
                     pass
         return filePath
 
-    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False):
+    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False, sparse_factor=None):
+        '''
+        Parameter:
+            sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
+        '''
         self.datetimeRange = datetimeRange
         self.variables_to_load = variableNames
         start, end = self.datetimeRange
@@ -604,6 +613,9 @@ class Dataset:
                 logging.debug('datetimeRange: {}'.format(datetimeRange))
                 dataMajor, dataAux, varInfoDict = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
                 logging.debug('reading data file done: {}'.format(filePath))
+                if sparse_factor:
+                    numberOfRecords = len(dataMajor[list(dataMajor.keys())[0]])
+                    dataMajor = dat.mask_dict_of_ndarray(dataMajor, slice(0, numberOfRecords, sparse_factor), copy=True)
                 variablesInADatasetOverDatetimeRange.append(dataMajor)
                 variablesInADatasetIndependantOnTime.append(dataAux)
             start_ = endOfTheFilePeriod

@@ -18,6 +18,8 @@ readFTP = True # if True, the program reads from ftp the list of the files you w
 #dataNameDict = {'ace': {'mag': {'level_2_cdaweb': 'mfi_h3'}, 'swepam': {'level_2_cdaweb': 'swe_h0'}}}
 
 missionName = 'mms'
+dataNameDict = {missionName: {}}
+
 spacecraftNames = []
 mmsNumbers = [1]
 for mmsNumber in mmsNumbers:

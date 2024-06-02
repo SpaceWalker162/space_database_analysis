@@ -6,7 +6,8 @@ import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseUserTools as dut
 import functools
 import matplotlib as mpl
-from datetime import datetime
+#from datetime import datetime
+import datetime as dt
 from itertools import combinations
 from scipy.signal import butter, lfilter, freqz
 from scipy.optimize import fsolve
@@ -90,7 +91,7 @@ class mms:
         xGSEAllSpacecrafts = dataAllSpacecrafts
         xGSEConstellationCenter = np.mean(xGSEAllSpacecrafts, axis=-2)
         xGSEAllSpacecraftsInConstellationCenter = xGSEAllSpacecrafts - xGSEConstellationCenter[..., None, :]
-        print('approximating...')
+        print('approximating with input data shape {}...'.format(EAllSpacecrafts.shape))
         coeff = leastSquarePolynomialApproximation(j=EAllSpacecrafts, x=xGSEAllSpacecraftsInConstellationCenter, d=1, omega=None, regularizationMethod=None, regPara=None, solver='direct')
         print('approximated')
         timingShape = volumetricAnalysis(xGSEAllSpacecrafts)
@@ -591,17 +592,23 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     Time series may contain gap, this function replace the original method plot to better tackle the gaps in plot by not plotting them.
     Parameters:
         gap_threshold: two data point with a gap larger than this will not be connected in plot. If this parameter is not given, 5 * minimum gap in time series will be used.
+        time_data: when the first parameter args[0] is not time, this parameter should be provided to break all data into blocks. This parameter can be used in the case of plotting trajectory of spacecraft that is not continuous
     '''
     assert len(args) == 2
     x = args[0]
     y = args[1]
     gap_threshold = kwargs.get('gap_threshold')
-    xdiff = np.diff(x)
+    time_data = kwargs.get('time_data')
+    if time_data is None:
+        tdiff = np.diff(x)
+    else:
+        tdiff = np.diff(time_data)
+        _ = kwargs.pop('time_data')
     if gap_threshold:
         _ = kwargs.pop('gap_threshold')
     else:
-        gap_threshold = 5*np.min(xdiff)
-    break_points = np.nonzero(xdiff > gap_threshold)[0] + 1
+        gap_threshold = 5*np.min(tdiff)
+    break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
     break_points = np.insert(break_points, 0, 0)
     break_points = np.append(break_points, len(x))
     plots_ = []
@@ -694,9 +701,9 @@ def datetime2epoch(dateTime, epochType='CDF_EPOCH'):
 
 def epoch2datetime(epoch, epochType='CDF_EPOCH'):
     if epochType == 'CDF_EPOCH':
-        return datetime(*cdflib.cdfepoch.breakdown_epoch(epoch)[:6])
+        return dt.datetime(*cdflib.cdfepoch.breakdown_epoch(epoch)[:6])
     elif epochType == 'CDF_TIME_TT2000':
-        return datetime(*cdflib.cdfepoch.breakdown_tt2000(epoch)[:6])
+        return dt.datetime(*cdflib.cdfepoch.breakdown_tt2000(epoch)[:6])
 
 class Epoch:
     '''
@@ -745,8 +752,18 @@ class Epochs:
             CDF_TIME_TT2000: a list nested to any degree of depth or a ndarray.
         '''
         self.data = {}
+        if isinstance(datetime, dt.datetime):
+            datetime = [datetime]
         self.data['datetime'] = datetime
+        if CDF_EPOCH is not None:
+            CDF_EPOCH = np.array(CDF_EPOCH)
+            if len(CDF_EPOCH.shape) == 0:
+                CDF_EPOCH = CDF_EPOCH[..., None]
         self.data['CDF_EPOCH'] = CDF_EPOCH
+        if CDF_TIME_TT2000 is not None:
+            if len(CDF_TIME_TT2000.shape) == 0:
+                CDF_TIME_TT2000 = CDF_TIME_TT2000[..., None]
+            CDF_TIME_TT2000 = np.array(CDF_TIME_TT2000)
         self.data['CDF_TIME_TT2000'] = CDF_TIME_TT2000
         for data_format, data in self.data.items():
             if data is not None:
@@ -774,21 +791,25 @@ class Epochs:
             components = cdflib.epochs.CDFepoch.breakdown_tt2000(data)
         elif fm == 'datetime':
             epochType = ('_').join(cls.standard_fm.split('_')[:-1])
-            components = ot.datetime2list(data, epochType=epochType)
+            components = np.array(map_multi_dimensional_list(functools.partial(ot.datetime2list, epochType=epochType), data)).squeeze()
+#            components = ot.datetime2list(data, epochType=epochType)
         return components
 
     @staticmethod
     def compute(components, fm):
-        if fm == 'CDF_EPOCH':
-            data = cdflib.epochs.CDFepoch.compute_epoch(components)
-        elif fm == 'CDF_TIME_TT2000':
-            data = cdflib.epochs.CDFepoch.compute_tt2000(components)
-        elif fm == 'datetime':
+        if fm == 'datetime':
             if len(components.shape) == 1:
-                data = datetime(*components[:6])
+                data = [dt.datetime(*components[:6])]
             elif len(components.shape) == 2:
-                data = [datetime(*components_[:6]) for components_ in components]
+                data = [dt.datetime(*components_[:6]) for components_ in components]
             else: raise Exception('wrong input of components')
+        else:
+            if fm == 'CDF_EPOCH':
+                data = np.array(cdflib.epochs.CDFepoch.compute_epoch(components))
+            elif fm == 'CDF_TIME_TT2000':
+                data = cdflib.epochs.CDFepoch.compute_tt2000(components)
+            if len(data.shape) == 0:
+                data = data[..., None]
         return data
 
     def get_data(self, fm=None):
@@ -1511,7 +1532,7 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
             downArgs, = np.nonzero(deltaAngle >= 180)
             logging.debug("current up intersection:")
             logging.debug(cdflib.cdfepoch.breakdown(t[0]))
-            tOfInterest = Epoch(dateTime=datetime(2002, 2, 9, 0, 34, 0)).epoch
+            tOfInterest = Epoch(dateTime=dt.datetime(2002, 2, 9, 0, 34, 0)).epoch
             if np.abs(tOfInterest - t[0]) < 5000:
                 logging.debug('current block:')
                 logging.debug(cdflib.cdfepoch.breakdown(dataUpBlock[:, -1]))
@@ -1621,7 +1642,7 @@ def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, dat
                 plotPhaseSpaceDensityCut(ax, phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable)
             else:
                 plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable, integration=integration)
-            ax.set_title(datetime(*cdflib.cdfepoch.breakdown(t[tInd])[:6]))
+            ax.set_title(dt.datetime(*cdflib.cdfepoch.breakdown(t[tInd])[:6]))
     return fig
 
 
@@ -1970,10 +1991,14 @@ def quaternionMultiply(qs, scalarPos='last'):
        return q
     else: raise Exception
 
-def mask_dict_of_ndarray(dic, mask):
+def mask_dict_of_ndarray(dic, mask, copy=False):
     dic_new = {}
     for key, item in dic.items():
-        dic_new[key] = item[mask]
+        if copy:
+            dic_new[key] = np.copy(item[mask])
+        else:
+            dic_new[key] = item[mask]
     return dic_new
+
 
 #np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)

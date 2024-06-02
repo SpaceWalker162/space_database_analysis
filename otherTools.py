@@ -4,6 +4,7 @@ __author__ = 'Yufei Zhou'
 
 from datetime import datetime
 import copy
+import numpy as np
 
 ##
 class Directory:
@@ -257,3 +258,16 @@ def datetime2list(dateTime, epochType='CDF_EPOCH'):
         return [dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.microsecond//10**3, dateTime.microsecond%1000, 0, 0]
     elif epochType == 'CDF_TIME_TT2000':
         return [dateTime.year, dateTime.month, dateTime.day, dateTime.hour, dateTime.minute, dateTime.second, dateTime.microsecond//10**3, dateTime.microsecond%1000, 0]
+
+
+def decimal2binaryArray(array, order='>'):
+    binary = []
+    while np.any(array > 0):
+        array, rem = np.divmod(array, 2)
+        binary.append(rem)
+    if order == '>':
+        binary.reverse()
+    elif order == '<':
+        pass
+    binary_array = np.array(binary)
+    return np.moveaxis(binary_array, 0, -1)
