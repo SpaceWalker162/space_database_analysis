@@ -58,13 +58,30 @@ class mms:
     def chargeCalculation(self, datetimeRange, mode='fast', **kwargs):
         for spacecraft in self.spacecrafts:
             spacecraftName = spacecraft.name
+            quality_from = kwargs.get('quality_from')
+            if quality_from is None:
+                quality_from = 'quality'
+            if quality_from == 'quality':
+                quality_var_ret = (spacecraftName+'_edp_quality_'+mode+'_l2', 'quality')
+            elif quality_from == 'bitmask':
+                quality_var_ret = (spacecraftName+'_edp_bitmask_'+mode+'_l2', 'bitmask')
             datasets_variables_with_retrieving_names = {
-                (spacecraftName+'_edp_'+mode+'_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_'+mode+'_l2', 't'), (spacecraftName+'_edp_dce_gse_'+mode+'_l2', 'E'), (spacecraftName+'_edp_dce_dsl_'+mode+'_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_'+mode+'_l2', 'E_err'), (spacecraftName+'_edp_quality_'+mode+'_l2', 'quality')],
+                (spacecraftName+'_edp_'+mode+'_l2_dce').upper(): ['EDP', (spacecraftName+'_edp_epoch_'+mode+'_l2', 't'), (spacecraftName+'_edp_dce_gse_'+mode+'_l2', 'E'), (spacecraftName+'_edp_dce_dsl_'+mode+'_l2', 'E_dsl'), (spacecraftName+'_edp_dce_err_'+mode+'_l2', 'E_err'), quality_var_ret],
                 (spacecraftName+'_mec_srvy_l2_epht89q').upper(): ['MEC89Q', ('Epoch', 't'), (spacecraftName+'_mec_r_gse', 'xGSE'), (spacecraftName+'_mec_v_gse', 'vGSE'), (spacecraftName+'_mec_quat_eci_to_dsl', 'quat_eci_to_dsl'), (spacecraftName+'_mec_quat_eci_to_gse', 'quat_eci_to_gse')],
                 }
             spacecraft.loadData(datetimeRange=datetimeRange, datasets_variables_with_retrieving_names=datasets_variables_with_retrieving_names, **kwargs)
             source = 'EDP'
-            quality_mask = spacecraft.data[source]['quality'] > 1
+            if quality_from == 'bitmask':
+                bitmask = ot.decimal2binaryArray(spacecraft.data[source]['bitmask'], order='<')
+                expected_bitmask_size = len(dut._mms_edp_bitmask)
+                if bitmask.shape[-1] < expected_bitmask_size:
+                    bitmask_ = np.zeros((*bitmask.shape[:-1], expected_bitmask_size))
+                    bitmask_[..., :bitmask.shape[-1]] = bitmask
+                    bitmask = bitmask_
+                quality_flags = np.min(np.where(bitmask, dut._mms_edp_bitmask, 3), axis=-1)
+                quality_mask = quality_flags > 1
+            elif quality_from == 'quality':
+                quality_mask = spacecraft.data[source]['quality'] > 1
             spacecraft.data[source] = mask_dict_of_ndarray(spacecraft.data[source], quality_mask)
             quat_dsl_to_gse = sppcoo.quaternionMultiply(sppcoo.quaternionConjugate(spacecraft.data['MEC89Q']['quat_eci_to_dsl']), spacecraft.data['MEC89Q']['quat_eci_to_gse'])
             spacecraft.data['MEC89Q']['quat_dsl_to_gse'] = quat_dsl_to_gse

@@ -232,80 +232,6 @@ class Spacecraft:
             if cleanData:
                 self.cleanData(instrumentation=instrumentationRetrivingName, tStepPecentageCriterion=tStepPecentageCriterion, lowpassCutoff=lowpassCutoff, inPlace=inPlace, gapThreshold=gapThreshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=returnShiftQ)
 
-    def readData(self, workDataDir, datasetsAndVariables, datetimeRange, workDataDirsBak=None, copy_if_not_exist=True, search_online=False):
-        '''
-        Purpose:
-            This function is to load data.
-        Parameters:
-            workDataDir: the path to the directory of working data base
-            datasetAndVariables: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['Epoch', 'Btotal']}}}}}. Please note that Epoch and Btotal are improvised. It may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['time_tags__C1_CP_FGM_FULL', 'B_vec_xyz_gse__C1_CP_FGM_FULL']].
-            datetimeRange: a list of two elements which define the time interval during which the data is to be retrieved. [start, end]
-            workDataDirsBak: a list of backup databases
-            saveDataFileInWorkDataDir: self-explanatory
-        Return:
-            variablesAllDataset: a list of dict. The list is for multiple datasets, the keys of a dict is for the variables in a dataset.
-        '''
-        start = datetimeRange[0]
-        end = datetimeRange[1]
-        if isinstance(datasetsAndVariables, dict):
-            datasetsAndVariablesList = ot.dict2list(datasetsAndVariables)
-        elif isinstance(datasetsAndVariables, list):
-            datasetsAndVariablesList = datasetsAndVariables
-        variablesAllDataset = []
-
-        # load dataset info
-        datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak)
-        for datasetAndVariables in datasetsAndVariablesList:
-            logging.debug('finding files for dataset and variables: ')
-            logging.debug(datasetAndVariables)
-            splitedPathToDataset = datasetAndVariables[:-1]
-            variableNames = datasetAndVariables[-1]
-            start_ = start
-            variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
-            datasetID = '_'.join(splitedPathToDataset).upper()
-            dataset_info = datasets_info[datasetID]
-            variablesInADatasetIndependantOnTime = []
-            if 'brst' in splitedPathToDataset:
-                allowedTimeExtension = timedelta(seconds=600)
-                dataFileTimeRange = [start-allowedTimeExtension, end]
-                logging.debug('brst time range')
-                logging.debug(dataFileTimeRange)
-                dataFile = DataFile(workDataDir=workDataDir, splitedPathToDataset=splitedPathToDataset, timeRange=dataFileTimeRange)
-                workDataFile = dataFile
-                if workDataDirsBak:
-                    for workDataDirBak in workDataDirsBak:
-                        dataFileBak = DataFile(workDataDir=workDataDirBak, splitedPathToDataset=splitedPathToDataset, timeRange=dataFileTimeRange, defineCDFFileQ=False)
-                        if dataFileBak.filePaths:
-                            desiredDataPaths = []
-                            for filePathBak in dataFileBak.filePaths:
-                                workFilePath = os.path.join(os.path.relpath(filePathBak, workDataDirBak), workDataDir)
-                                if workFilePath in workDataFile.filePaths:
-                                    desiredDataPaths.append(workFilePath)
-                                else:
-                                    if copy_if_not_exist:
-                                        destFilePath = workDataDirCopy(filePathBak, workDataDir, workDataDirBak)
-                                        desiredDataPaths.append(destFilePath)
-                                    else:
-                                        desiredDataPaths.append(filePathBak)
-                desiredDataPaths.sort()
-                dataFile = DataFile(filePaths=desiredDataPaths)
-                for fileInd, cdfFile in enumerate(dataFile.cdfFiles):
-                    logging.debug('reading data file: {}'.format(dataFile.filePaths[fileInd]))
-                    logging.debug('datetimeRange: {}'.format(datetimeRange))
-                    dataMajor, dataAux = readDataFromACdfFile(cdfFile, variableNames, datetimeRange)
-                    logging.debug('reading data file done: {}'.format(dataFile.filePath))
-                    variablesInADatasetOverDatetimeRange.append(dataMajor)
-                    variablesInADatasetIndependantOnTime.append(dataAux)
-            else:
-                logging.debug('not in brst')
-                dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
-                dataset.load_data(variableNames=None, datetimeRange=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
-
-            variables.update(variablesInADatasetIndependantOnTime[0])
-    #        for indOfVariable in range(len(variablesInADatasetOverDatetimeRange[0])):
-    #            variables.append(np.concatenate([variables[indOfVariable] for variables in variablesInADatasetOverDatetimeRange], axis=0))
-            variablesAllDataset.append(variables)
-        return variablesAllDataset
 
     def cleanData(self, instrumentation, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, tName='t', gapThreshold=None, minNumberOfPoints=None, returnShiftQ=None):
         '''
@@ -1007,7 +933,11 @@ def readDataFromACdfFile(cdfFile=None, variables=None, datetimeRange=None, cdf_f
         dataMajor = {}
         dataAux = {} # data not dependant on epoch
         for var in variables:
-            pad = cdfFile.varinq(var).Pad
+            fillval = varInfoDict[var]['varAtts'].get('FILLVAL', None)
+            if fillval is None:
+                pad = cdfFile.varinq(var).Pad
+            else:
+                pad = fillval
             logging.debug('var: ' + var)
             majorData = True
             depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
@@ -1026,11 +956,11 @@ def readDataFromACdfFile(cdfFile=None, variables=None, datetimeRange=None, cdf_f
                     epochType = varInfoDict[epochDataName]['varInfo'].Data_Type_Description
                     timeRange = [ot.datetime2list(dateTime, epochType=epochType) for dateTime in datetimeRange]
                     varData = cdfFile.varget(var, starttime=timeRange[0], endtime=timeRange[1])
-                    if np.issubdtype(varData.dtype, np.number):
-                        varData = np.ma.masked_equal(varData, pad)
-                        varData = varData.filled(np.nan)
-                    else:
-                        pass
+                    try:
+                        if np.issubdtype(varData.dtype, np.number):
+                            varData = np.ma.masked_equal(varData, pad)
+                            varData = varData.filled(np.nan)
+                    except: pass
                     dataMajor[var] = varData
                     logging.debug('data type: {}'.format(str(type(dataMajor[var]))))
                     if dataMajor[var] is None:
