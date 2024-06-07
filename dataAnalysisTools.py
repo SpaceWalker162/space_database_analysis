@@ -19,6 +19,11 @@ import logging
 import spacepy.coordinates as sppcoo
 import matplotlib.axes._axes
 
+plt.rcParams['font.size'] = 24
+plt.rcParams['font.size'] = 18
+plt.rcParams['xtick.direction'] = 'in'
+plt.rcParams['ytick.direction'] = 'in'
+plt.rcParams['axes.grid'] = 'True'
 
 '''
 <A, B> means either A or B
@@ -35,10 +40,10 @@ radius_Mercury_in_meters = 2.4397 * 10**6
 solarNorthPoleOfRotationInICRFEquatorial = np.array([63.87, 286.13])/180*np.pi # latitude and longitude
 saturnianNorthPoleOfRotationInICRFEquatorial = np.array([83.54, 40.58])/180*np.pi
 
-mass_proton = 1.6726 * 10**(-27)
-mass_electron = 9.11 * 10**(-31)
+mass_proton = 1.6726 * 10**(-27) # in kg
+mass_electron = 9.11 * 10**(-31) # in kg
 
-eV = 1.602176634 * 10**(-19)
+eV = 1.602176634 * 10**(-19) # in Joule
 magnetic_permeability_in_vacuum = 4*np.pi*10**(-7)
 
 class mms:
@@ -58,7 +63,9 @@ class mms:
     def chargeCalculation(self, datetimeRange, mode='fast', **kwargs):
         for spacecraft in self.spacecrafts:
             spacecraftName = spacecraft.name
-            quality_from = kwargs.get('quality_from')
+            try:
+                quality_from = kwargs.pop('quality_from')
+            except: quality_from = None
             if quality_from is None:
                 quality_from = 'quality'
             if quality_from == 'quality':
@@ -621,9 +628,11 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     else:
         tdiff = np.diff(time_data)
         _ = kwargs.pop('time_data')
-    if gap_threshold:
+
+    try:
         _ = kwargs.pop('gap_threshold')
-    else:
+    except: pass
+    if gap_threshold is None:
         gap_threshold = 5*np.min(tdiff)
     break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
     break_points = np.insert(break_points, 0, 0)
@@ -2017,5 +2026,30 @@ def mask_dict_of_ndarray(dic, mask, copy=False):
             dic_new[key] = item[mask]
     return dic_new
 
+def concatenate_dict_of_ndarray(dic_list, axis=None):
+    dic_new = {}
+    for key in dic_list[0].keys():
+        if isinstance(axis, int):
+            dic_new[key] = np.concatenate([dic[key] for dic in dic_list], axis=axis)
+        elif axis is None:
+            dic_new[key] = np.concatenate([dic[key][None, ...] for dic in dic_list], axis=0)
+    return dic_new
+
+def arg_split(data, gap_threshold=1):
+    '''
+    data: 1d ndarray
+    t_gap: in seconds
+    return:
+        break_points: the split data is retrieved by
+            data_split = []
+            for ind in range(len(break_points)-1):
+                s_ = slice(*break_points[ind:ind+2])
+                data_split.append(data[s_])
+    '''
+    tdiff = np.diff(data)
+    break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
+    break_points = np.insert(break_points, 0, 0)
+    break_points = np.append(break_points, len(data))
+    return break_points
 
 #np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)

@@ -17,6 +17,12 @@ Any time you want to update the code to the latest version, run from the command
 git pull
 ```
 
+Install dependent packages not included in the anaconda base environment
+```sh
+conda activate
+pip install cdasws cdflib
+```
+
 If you do not use command line there are github programs for Windows and Mac, see github web page.
 
 ## Usage
