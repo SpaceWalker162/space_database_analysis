@@ -80,7 +80,8 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
     databaseDirs = set(databaseDirs)
 
     if fileNamesSource == 'internet':
-        fileInfoDict = dbt.readFTPHTTPFileInfoRecursively(host=host, commonPath=remoteDataDir, path=dataNameDict, verbose=verbose, facts=['size'], logFileDir=logFileDir)
+        logging.info('reading {} for files to download'.format(host))
+        fileInfoDict = dbt.readFTPHTTPFileInfoRecursively(host=host, commonPath=remoteDataDir, path=dataNameDict, verbose=verbose, facts=['size'], logFileDir=logFileDir, protocol=protocol)
     else:
         fileInfoDict = dbt.loadFileInfoDict(logFileDir=logFileDir)
 

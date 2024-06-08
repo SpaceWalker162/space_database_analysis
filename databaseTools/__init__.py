@@ -316,12 +316,18 @@ class HTTP(urllib3.PoolManager):
         self.current_path = PurePath(self.current_path, path)
 
     def mlsd(self, path, facts=None):
-        url_ = urljoin(self.type+'://'+self.host+self.current_path, path)
+        url_ = self.type+'://'+self.host+str(PurePath(self.current_path, path))
         resp = self.request('GET', url_)
-        objs = self._parse_cdaweb_html(resp.data)
+        objs = self._parse_cdaweb_html(resp.data.decode('ascii'))
         if facts is None:
             return [(obj[0], None) for obj in objs]
         else:
+            if 'size' in facts:
+                for objName, objFact in objs:
+                    if 'size' in objFact:
+                        sizeStr = objFact.get('size')
+                        size_unit_map = {'K': 1024, 'M': 1024**2}
+                        objFact['size'] = float(sizeStr[:-1]) * int(size_unit_map[sizeStr[-1]])
             return [(obj[0], {key: obj[1].get(key) for key in facts}) for obj in objs]
 
     @staticmethod
@@ -335,7 +341,7 @@ class HTTP(urllib3.PoolManager):
             if in_content:
                 cdawebHTMLParser = CDAWebHTMLParser()
                 cdawebHTMLParser.feed(line)
-                if cdawebHTMLParser.objName:
+                if hasattr(cdawebHTMLParser, 'objName'):
                     objs.append((cdawebHTMLParser.objName, cdawebHTMLParser.objFact))
         return objs
 
@@ -486,7 +492,7 @@ class FileDownloadCommander:
             for fInd, remoteFileName in enumerate(rawWork):
                 if isinstance(remoteFileName, list):
                     remoteFilePath = remoteFileName
-                    remoteFileName = str(PurePath(remoteFileName))
+                    remoteFileName = str(PurePath(*remoteFileName))
                 elif isinstance(remoteFileName, str):
                     remoteFilePath = remoteFileName.split('/')
                 remoteFileFullName = str(PurePath(self.downloadRootPath, remoteFileName))
@@ -604,23 +610,27 @@ class FileDownloader(threading.Thread):
 
     def process(self):
         if self.protocol == 'ftp':
+            logging.info('connecting ftp server at {}'.format(self.host))
             self.ftp = ReconnectingFTP(self.host, timeout=self.timeout)
             lgMess = self.ftp.login()
             logging.info(lgMess)
         while True:
             self.currentWork = self.pendingWorks.get()
             srcName, dstName = self.currentWork
-            logging.info('downloading: ' + dstName)
             try:
                 downloadStart = datetime.now()
                 with open(dstName, 'wb') as f:
                     self.fInd += 1
                     self.fInfo.put((self.fInd, f))
                     if self.protocol == 'ftp':
+                        logging.info('downloading {} from {}'.format(dstName, srcName))
                         self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
                     elif self.protocol == 'http':
                         url_ = urljoin('https://' + self.host, srcName)
-                        resp = urllib3.request("GET", url_, preload_content=False)
+                        logging.info('downloading {} from {}'.format(dstName, url_))
+                        http = urllib3.PoolManager()
+                        resp = http.request("GET", url_, preload_content=False)
+
                         for chunk in resp.stream(self.blocksize):
                             self.callback(chunk)
                         resp.release_conn()
@@ -958,13 +968,14 @@ def downloadFTPTree(ftp, ftpPath=None, localPath=None, verbose=False):
     downloadFTPRecursively(ftp, verbose=verbose)
 
 
-def readFTPHTTPFileInfoRecursively(ftp_or_http=None, host=None, commonPath=None, path='.', verbose=False, facts=None, logFileDir='', logFileHandle=None, protocol='ftp'):
+def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path='.', verbose=False, facts=None, logFileDir='', logFileHandle=None, protocol='ftp'):
     '''
     This function is a part of a collection of functions to download data from cdaweb.
     Parameters:
         commonPath: the common path leading from the host to the directory where 
         path: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': 'fpi', 'mms2': 'fpi'}}
     '''
+    logging.debug('in reading function')
     def func_base(para, **keywords):
         '''
         Parameters:
@@ -987,23 +998,26 @@ def readFTPHTTPFileInfoRecursively(ftp_or_http=None, host=None, commonPath=None,
         closeLogHandle = False
 
     if protocol == 'ftp':
-        if ftp_or_http is None:
-            ftp_or_http = ReconnectingFTP(host)
-            lgMess = ftp_or_http.login()
-            print(lgMess)
-            ftp_or_http.cwd(commonPath)
-        func = functools.partial(func_base, ftp_or_http=ftp_or_http, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+        if client is None:
+            logging.info('connecting ftp server at {}'.format(host))
+            client = ReconnectingFTP(host)
+            lgMess = client.login()
+            logging.info(lgMess)
+            client.cwd(commonPath)
+        func = functools.partial(func_base, client=client, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
     elif protocol == 'http':
-        ftp_or_http = HTTP()
-        ftp_or_http.cwd(commonPath)
-        func = functools.partial(func_base, ftp_or_http=ftp_or_http, verbose=verbose, logFileDir=logFileDir, logFileHandle=logFileHandle)
+        if client is None:
+            client = HTTP(host=host)
+            client.cwd(commonPath)
+        func = functools.partial(func_base, client=client, facts=facts, verbose=verbose, logFileDir=logFileDir, logFileHandle=logFileHandle)
+    logging.debug('client defined according to protocol {}'.format(protocol))
 
     if isinstance(path, str): # this is the main branch
         fileInfoDict = {}
         if path[-1] == '/':
             path = path[:-1]
         if verbose:
-            print('reading {protocol} {path}'.format(protocol=protocol.upper(), path=path))
+            logging.info('reading {protocol} {path}'.format(protocol=protocol.upper(), path=path))
         fact0 = 'type'
         if facts is None:
             facts_ = [fact0]
@@ -1011,11 +1025,11 @@ def readFTPHTTPFileInfoRecursively(ftp_or_http=None, host=None, commonPath=None,
             facts_ = facts.copy()
             facts_.append(fact0)
         facts_ = set(facts_)
-        objs = ftp_or_http.mlsd(path=path, facts=facts_)
+        objs = client.mlsd(path=path, facts=facts_)
         for objName, objFact in objs:
             objAbsName = '/'.join([path, objName])
             if objFact['type'] == 'dir':
-                fileInfoDict_ = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+                fileInfoDict_ = readFTPHTTPFileInfoRecursively(client=client, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
                 fileInfoDict[objName] = fileInfoDict_
             elif objFact['type'] == 'file':
                 del objFact['type']
@@ -1026,16 +1040,16 @@ def readFTPHTTPFileInfoRecursively(ftp_or_http=None, host=None, commonPath=None,
                     print(objAbsName, file=logFileHandle[1])
                     print(objFact, file=logFileHandle[1])
         if verbose:
-            print('reading {protocol} {path} done'.format(protocol=protocol, path=path))
+            logging.info('reading {protocol} {path} done'.format(protocol=protocol, path=path))
         if logFileHandle:
             print(path, file=logFileHandle[0])
     elif isinstance(path, list):
         if isinstance(path[0], str):
             path = ot.list2dict([path])
-            fileInfoDict = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
         elif isinstance(path[0], list):
             path = ot.list2dict(path)
-            fileInfoDict = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
     elif isinstance(path, dict):
         fileInfoDict = copy.deepcopy(path)
         _ = ot.doAtLeavesOfADict(fileInfoDict, do=func)
