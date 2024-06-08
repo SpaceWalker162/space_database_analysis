@@ -9,9 +9,11 @@ import json
 import cdasws
 from datetime import datetime, timedelta
 import urllib3
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
+from html.parser import HTMLParser
 import time
 import space_database_analysis.otherTools as ot
+from pathlib import PurePath
 import copy
 import ast
 #import progressbar
@@ -278,6 +280,66 @@ class Database:
             with open(self.additional_datasets_info_paths[0], 'r') as f:
                 self.additional_datasets_info = json.load(f)
 
+
+class CDAWebHTMLParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.data_counts = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a' and attrs[0][0] == 'href':
+            self.objName = attrs[0][1]
+
+    def handle_endtag(self, tag):
+        pass
+
+    def handle_data(self, data):
+        self.data_counts += 1
+        if self.data_counts == 3:
+            self.objFact = {}
+            size = data.strip()
+            if size == '-':
+                self.objFact['type'] = 'dir'
+            else:
+                self.objFact['type'] = 'file'
+                self.objFact['size'] = size
+
+
+class HTTP(urllib3.PoolManager):
+    def __init__(self, *argt, host=None, **argd):
+        super().__init__(*argt, **argd)
+        self.host = host
+        self.current_path = PurePath('/')
+        self.type = 'https'
+
+    def cwd(self, path):
+        self.current_path = PurePath(self.current_path, path)
+
+    def mlsd(self, path, facts=None):
+        url_ = urljoin(self.type+'://'+self.host+self.current_path, path)
+        resp = self.request('GET', url_)
+        objs = self._parse_cdaweb_html(resp.data)
+        if facts is None:
+            return [(obj[0], None) for obj in objs]
+        else:
+            return [(obj[0], {key: obj[1].get(key) for key in facts}) for obj in objs]
+
+    @staticmethod
+    def _parse_cdaweb_html(con):
+        objs = []
+        in_content = False
+        for line in con.split('\n'):
+            if "Parent Directory" in line:
+                in_content = True
+                continue
+            if in_content:
+                cdawebHTMLParser = CDAWebHTMLParser()
+                cdawebHTMLParser.feed(line)
+                if cdawebHTMLParser.objName:
+                    objs.append((cdawebHTMLParser.objName, cdawebHTMLParser.objFact))
+        return objs
+
+
 def dirsInit(path, dictOfDirs):
     for supperDir, subDir in dictOfDirs.items():
         makeDirsFromDict(path, supperDir, subDir)
@@ -395,15 +457,15 @@ class ReconnectingFTP(FTP_TLS):
                     self.reconnect()
         return objs
 
-class FTPDownloadCommander:
-    def __init__(self, remoteFileNames, ftpAddr=None, ftpPath=None, downloadedFileNames=None, destPath='.', verbose=False, keepDownloading=False, blocksize=32768, timeout=20, workerNumber=2, monitorInterval=10):
+class FileDownloadCommander:
+    def __init__(self, remoteFileNames, host=None, downloadRootPath=None, downloadedFileNames=None, destPath='.', verbose=False, keepDownloading=False, blocksize=32768, timeout=20, workerNumber=2, monitorInterval=10, protocol='ftp'):
         '''
         Parameters:
             remoteFileNames: a list of string, such as ['mms/mms1/.../fileName', ...], or a list of list of string
         '''
         self.remoteFileNames = remoteFileNames
-        self.ftpAddr = ftpAddr
-        self.ftpPath = ftpPath
+        self.host = host
+        self.downloadRootPath = downloadRootPath
         self.downloadedFileNames = downloadedFileNames
         self.destPath = destPath
         self.verbose = verbose
@@ -415,24 +477,30 @@ class FTPDownloadCommander:
         self.workers = []
         self.monitors = []
         self.preparePendingWorks()
+        self.protocol = protocol
 
     def preparePendingWorks(self, source='remoteFileNames'):
         if source == 'remoteFileNames':
             self.pendingWorks = []
             rawWork = self.remoteFileNames
             for fInd, remoteFileName in enumerate(rawWork):
-                if isinstance(remoteFileName, str):
-                    remoteFilePath = remoteFileName.split('/')
-                    remoteFileFullPath = []
-                    remoteFileFullPath.append(self.ftpPath)
-                    remoteFileFullPath.extend(remoteFilePath)
-                    remoteFileFullName = '/'.join(remoteFileFullPath)
-                else:
+                if isinstance(remoteFileName, list):
                     remoteFilePath = remoteFileName
-                    remoteFileFullPath = []
-                    remoteFileFullPath.append(self.ftpPath)
-                    remoteFileFullPath.extend(remoteFilePath)
-                    remoteFileFullName = '/'.join(remoteFileFullPath)
+                    remoteFileName = str(PurePath(remoteFileName))
+                elif isinstance(remoteFileName, str):
+                    remoteFilePath = remoteFileName.split('/')
+                remoteFileFullName = str(PurePath(self.downloadRootPath, remoteFileName))
+#                    remoteFilePath = remoteFileName.split('/')
+#                    remoteFileFullPath = []
+#                    remoteFileFullPath.append(self.downloadRootPath)
+#                    remoteFileFullPath.extend(remoteFilePath)
+#                    remoteFileFullName = '/'.join(remoteFileFullPath)
+#                else:
+#                    remoteFilePath = remoteFileName
+#                    remoteFileFullPath = []
+#                    remoteFileFullPath.append(self.downloadRootPath)
+#                    remoteFileFullPath.extend(remoteFilePath)
+#                    remoteFileFullName = '/'.join(remoteFileFullPath)
                 if self.downloadedFileNames:
                     downloadedFileName = self.downloadedFileNames[fInd]
                     if isinstance(downloadedFileName, str):
@@ -498,7 +566,7 @@ class FTPDownloadCommander:
 
     def addWorkerAndMonitor(self):
         fInfo = queue.LifoQueue()
-        worker = FileDownloader(ftpAddr=self.ftpAddr, fInfo=fInfo, verbose=self.verbose, blocksize=self.blocksize, timeout=self.timeout)
+        worker = FileDownloader(host=self.host, fInfo=fInfo, verbose=self.verbose, blocksize=self.blocksize, timeout=self.timeout, protocol=self.protocol)
         work = self.pendingWorks.pop()
         worker.pendingWorks.put(work)
         worker.start()
@@ -516,8 +584,8 @@ class FTPDownloadCommander:
 
 
 class FileDownloader(threading.Thread):
-    def __init__(self, ftpAddr=None, currentWork=None, fInfo=None, verbose=False, blocksize=32768, timeout=20):
-        self.ftpAddr = ftpAddr
+    def __init__(self, host=None, currentWork=None, fInfo=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp'):
+        self.host = host
         self.fInfo = fInfo
         self.fInd = -1
         self.currentWork = currentWork
@@ -526,6 +594,7 @@ class FileDownloader(threading.Thread):
         self.verbose = verbose
         self.blocksize = blocksize
         self.timeout = timeout
+        self.protocol = protocol
         super().__init__(target=self.process, daemon=True)
 
     def callback(self, cont):
@@ -534,9 +603,10 @@ class FileDownloader(threading.Thread):
         self.fInfo.put((fInd, f))
 
     def process(self):
-        self.ftp = ReconnectingFTP(self.ftpAddr, timeout=self.timeout)
-        lgMess = self.ftp.login()
-        logging.info(lgMess)
+        if self.protocol == 'ftp':
+            self.ftp = ReconnectingFTP(self.host, timeout=self.timeout)
+            lgMess = self.ftp.login()
+            logging.info(lgMess)
         while True:
             self.currentWork = self.pendingWorks.get()
             srcName, dstName = self.currentWork
@@ -546,7 +616,14 @@ class FileDownloader(threading.Thread):
                 with open(dstName, 'wb') as f:
                     self.fInd += 1
                     self.fInfo.put((self.fInd, f))
-                    self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
+                    if self.protocol == 'ftp':
+                        self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
+                    elif self.protocol == 'http':
+                        url_ = urljoin('https://' + self.host, srcName)
+                        resp = urllib3.request("GET", url_, preload_content=False)
+                        for chunk in resp.stream(self.blocksize):
+                            self.callback(chunk)
+                        resp.release_conn()
                     fInd, f = self.fInfo.get()
             except KeyboardInterrupt:
                 self.ftp.abort()
@@ -732,9 +809,9 @@ def ftpDownload(ftp, remoteFileName, downloadedFileName, blocksize=8192, verbose
     return fileSizeInM, timeCost, speed
 
 
-def downloadSPDF(remotePath, localPath, ftpAddr='cdaweb.gsfc.nasa.gov', years=None, monthsList=None):
+def downloadSPDF(remotePath, localPath, host='cdaweb.gsfc.nasa.gov', years=None, monthsList=None):
     '''This function is deprecated. Use SyncSPDF instead'''
-    ftp = FTP_TLS(ftpAddr)
+    ftp = FTP_TLS(host)
     ftp.login()
     ftp.cwd(remotePath)
     if years == None:
@@ -788,7 +865,7 @@ def goToDataDir(ftp, remoteDataDir, localDataDir):
     os.chdir(localDataDir)
 
 
-def syncSPDF(localDataDir, dataDict=None, ftpAddr='cdaweb.gsfc.nasa.gov', dataPath=None, verbose=False, allowOverwrite=False, overwriteOption=None):
+def syncSPDF(localDataDir, dataDict=None, host='cdaweb.gsfc.nasa.gov', dataPath=None, verbose=False, allowOverwrite=False, overwriteOption=None):
     '''
     Purpose:
         To download files from the spdf data server
@@ -798,7 +875,7 @@ def syncSPDF(localDataDir, dataDict=None, ftpAddr='cdaweb.gsfc.nasa.gov', dataPa
         localDataDir: e.g. /mnt/data
         dataPath: a parameter in the form of a path that overwrite dataDict. For example, if mms/mms1/fpi/ is passed to this parameter, the function will download all files under this path from spdf. If path/to/file/fileName is passed to the parameter, the file will be downloaded.
     '''
-    ftp = FTP_TLS(ftpAddr)
+    ftp = FTP_TLS(host)
     lgMess = ftp.login()
     print(lgMess)
     remoteDataDir = '/pub/data/'
@@ -881,10 +958,12 @@ def downloadFTPTree(ftp, ftpPath=None, localPath=None, verbose=False):
     downloadFTPRecursively(ftp, verbose=verbose)
 
 
-def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.', verbose=False, facts=None, logFileDir='', logFileHandle=None):
+def readFTPHTTPFileInfoRecursively(ftp_or_http=None, host=None, commonPath=None, path='.', verbose=False, facts=None, logFileDir='', logFileHandle=None, protocol='ftp'):
     '''
+    This function is a part of a collection of functions to download data from cdaweb.
     Parameters:
-        ftpPath: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': 'fpi', 'mms2': 'fpi'}}
+        commonPath: the common path leading from the host to the directory where 
+        path: can be string, such as 'mms/mms1/fpi', or list of string, such as ['mms', 'mms1', 'fpi'], or list of list of string, such as [['mms', 'mms1', 'fpi'], ['mms', 'mms2', 'fpi']], or a dict, such as {'mms', {'mms1': 'fpi', 'mms2': 'fpi'}}
     '''
     def func_base(para, **keywords):
         '''
@@ -892,8 +971,8 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
             **keywords: should contain ftp, verbose, facts, logFileDir, logFileHandle
 
         '''
-        ftpPath_ = '/'.join(para[:-2])
-        fileInfoDict = readFTPFileInfoRecursively(ftpPath=ftpPath_, **keywords)
+        path_ = '/'.join(para[:-2])
+        fileInfoDict = readFTPHTTPFileInfoRecursively(path=path_, **keywords)
         para[-1][para[-3]] = fileInfoDict
         return None
 
@@ -906,30 +985,37 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
         closeLogHandle = True
     else:
         closeLogHandle = False
-    if ftp is None:
-        ftp = ReconnectingFTP(ftpAddr)
-        lgMess = ftp.login()
-        print(lgMess)
-        ftp.cwd(ftpDir)
-    func = functools.partial(func_base, ftp=ftp, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
 
-    if isinstance(ftpPath, str):
+    if protocol == 'ftp':
+        if ftp_or_http is None:
+            ftp_or_http = ReconnectingFTP(host)
+            lgMess = ftp_or_http.login()
+            print(lgMess)
+            ftp_or_http.cwd(commonPath)
+        func = functools.partial(func_base, ftp_or_http=ftp_or_http, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+    elif protocol == 'http':
+        ftp_or_http = HTTP()
+        ftp_or_http.cwd(commonPath)
+        func = functools.partial(func_base, ftp_or_http=ftp_or_http, verbose=verbose, logFileDir=logFileDir, logFileHandle=logFileHandle)
+
+    if isinstance(path, str): # this is the main branch
         fileInfoDict = {}
-        if ftpPath[-1] == '/':
-            ftpPath = ftpPath[:-1]
+        if path[-1] == '/':
+            path = path[:-1]
         if verbose:
-            print('reading FTP {}'.format(ftpPath))
+            print('reading {protocol} {path}'.format(protocol=protocol.upper(), path=path))
         fact0 = 'type'
         if facts is None:
             facts_ = [fact0]
         else:
             facts_ = facts.copy()
             facts_.append(fact0)
-        objs = ftp.mlsd(path=ftpPath, facts=facts_)
+        facts_ = set(facts_)
+        objs = ftp_or_http.mlsd(path=path, facts=facts_)
         for objName, objFact in objs:
-            objAbsName = '/'.join([ftpPath, objName])
+            objAbsName = '/'.join([path, objName])
             if objFact['type'] == 'dir':
-                fileInfoDict_ = readFTPFileInfoRecursively(ftp, ftpPath=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+                fileInfoDict_ = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
                 fileInfoDict[objName] = fileInfoDict_
             elif objFact['type'] == 'file':
                 del objFact['type']
@@ -940,18 +1026,18 @@ def readFTPFileInfoRecursively(ftp=None, ftpAddr=None, ftpDir=None, ftpPath='.',
                     print(objAbsName, file=logFileHandle[1])
                     print(objFact, file=logFileHandle[1])
         if verbose:
-            print('reading FTP {} done'.format(ftpPath))
+            print('reading {protocol} {path} done'.format(protocol=protocol, path=path))
         if logFileHandle:
-            print(ftpPath, file=logFileHandle[0])
-    elif isinstance(ftpPath, list):
-        if isinstance(ftpPath[0], str):
-            ftpPath = ot.list2dict([ftpPath])
-            fileInfoDict = readFTPFileInfoRecursively(ftp, ftpPath=ftpPath, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
-        elif isinstance(ftpPath[0], list):
-            ftpPath = ot.list2dict(ftpPath)
-            fileInfoDict = readFTPFileInfoRecursively(ftp, ftpPath=ftpPath, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
-    elif isinstance(ftpPath, dict):
-        fileInfoDict = copy.deepcopy(ftpPath)
+            print(path, file=logFileHandle[0])
+    elif isinstance(path, list):
+        if isinstance(path[0], str):
+            path = ot.list2dict([path])
+            fileInfoDict = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+        elif isinstance(path[0], list):
+            path = ot.list2dict(path)
+            fileInfoDict = readFTPHTTPFileInfoRecursively(ftp_or_http=ftp_or_http, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+    elif isinstance(path, dict):
+        fileInfoDict = copy.deepcopy(path)
         _ = ot.doAtLeavesOfADict(fileInfoDict, do=func)
     if closeLogHandle:
         fFTPDir.close()
@@ -1080,7 +1166,7 @@ def selectDownloadFromFTP(fileNamesFTP, fileFactsFTP, fileNamesLocal, fileFactsL
     return fToDownloadInfo
 
 
-def downloadFTPFromFileList(remoteFileNames, ftpAddr=None, ftpPath=None, ftp=None, downloadedFileNames=None, destPath='.', verbose=False, tolerateFailure=True, keepDownloading=False, blocksize=32768, timeout=20):
+def downloadFTPFromFileList(remoteFileNames, host=None, ftpPath=None, ftp=None, downloadedFileNames=None, destPath='.', verbose=False, tolerateFailure=True, keepDownloading=False, blocksize=32768, timeout=20):
     '''
     Parameters:
         remoteFileNames: a list of string, such as ['mms/mms1/.../fileName', ...], or a list of list of string
@@ -1095,7 +1181,7 @@ def downloadFTPFromFileList(remoteFileNames, ftpAddr=None, ftpPath=None, ftp=Non
         numberOfFiles = len(remoteFileNames)
         if ftp is None:
             closeFTP = True
-            ftp = ReconnectingFTP(ftpAddr, timeout=timeout)
+            ftp = ReconnectingFTP(host, timeout=timeout)
             lgMess = ftp.login()
             print(lgMess)
             ftp.cwd(ftpPath)
@@ -1138,7 +1224,7 @@ def downloadFTPFromFileList(remoteFileNames, ftpAddr=None, ftpPath=None, ftp=Non
         while len(remoteFileNames) > 0:
             downloadTurns +=1
             print('Start downloading turn: {}'.format(downloadTurns))
-            remoteFileNames, downloadedFileNames = downloadFTPFromFileList(remoteFileNames=remoteFileNames, ftpAddr=ftpAddr, ftpPath=ftpPath, ftp=ftp, downloadedFileNames=downloadedFileNames, destPath=destPath, verbose=verbose, tolerateFailure=tolerateFailure, blocksize=blocksize, timeout=timeout)
+            remoteFileNames, downloadedFileNames = downloadFTPFromFileList(remoteFileNames=remoteFileNames, host=host, ftpPath=ftpPath, ftp=ftp, downloadedFileNames=downloadedFileNames, destPath=destPath, verbose=verbose, tolerateFailure=tolerateFailure, blocksize=blocksize, timeout=timeout)
             print('failed in downloading {} files'.format(len(remoteFileNames)))
 
 

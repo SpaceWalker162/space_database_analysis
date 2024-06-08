@@ -6,12 +6,12 @@ import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 #import reconnecting_ftp
 
-def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='FTP', logFileDir=''):
+def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp'):
     '''
     Purpose:
         download data files from CDAWeb through FTP
     Parameters:
-        fileNamesSource: if 'FTP', read the FTP server to find file names for downloading; if not 'FTP', the function will read from a stored file in the logFileDir
+        fileNamesSource: if 'internet', read the FTP server to find file names for downloading; if not 'internet', the function will read from a stored file in the logFileDir
     <<<<<<<<<<<< Example <<<<<<<<<<
 
     import os
@@ -62,8 +62,7 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='F
 
 
     '''
-
-    ftpAddr ='cdaweb.gsfc.nasa.gov' #Address of the ftp
+    host ='cdaweb.gsfc.nasa.gov' #Address of the ftp
     remoteDataDir = '/pub/data' #ftp database directory
     verbose = True
     downloadBlocksize = 1024*32
@@ -79,8 +78,9 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='F
 
     databaseDirs.append(downloadDataDir)
     databaseDirs = set(databaseDirs)
-    if fileNamesSource == 'FTP':
-        fileInfoDict = dbt.readFTPFileInfoRecursively(ftpAddr=ftpAddr, ftpDir=remoteDataDir, ftpPath=dataNameDict, verbose=verbose, facts=['size'], logFileDir=logFileDir)
+
+    if fileNamesSource == 'internet':
+        fileInfoDict = dbt.readFTPHTTPFileInfoRecursively(host=host, commonPath=remoteDataDir, path=dataNameDict, verbose=verbose, facts=['size'], logFileDir=logFileDir)
     else:
         fileInfoDict = dbt.loadFileInfoDict(logFileDir=logFileDir)
 
@@ -92,11 +92,10 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='F
     fileInfoDict = ot.DictTree(fileInfoDict)
     toDownload = fileInfoDict.difference(localFileDictTree)
 
-    tolerateFailure = True
     toDownloadList_ = toDownload.toList()
     filePaths = [toD[:-2] for toD in toDownloadList_]
     print('number of files to download: {}'.format(len(filePaths)))
-    #dbt.downloadFTPFromFileList(remoteFileNames=filePaths, ftpAddr=ftpAddr, ftpPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, tolerateFailure=tolerateFailure, blocksize=downloadBlocksize)
-    ftpDownloader = dbt.FTPDownloadCommander(remoteFileNames=filePaths, ftpAddr=ftpAddr, ftpPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=20, workerNumber=2, monitorInterval=10)
+    #dbt.downloadFTPFromFileList(remoteFileNames=filePaths, host=host, ftpPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, tolerateFailure=tolerateFailure, blocksize=downloadBlocksize)
+    ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=20, workerNumber=2, monitorInterval=10, protocol=protocol)
     ftpDownloader.processQueue()
     print('End of the Program')

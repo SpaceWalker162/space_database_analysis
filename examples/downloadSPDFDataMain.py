@@ -13,18 +13,15 @@ elif sys.platform == 'win32':
 
 #databaseDirs = []
 
-readFTP = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
+readInternetForFileNames = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
 
 #dataNameDict = {'ace': {'mag': {'level_2_cdaweb': 'mfi_h3'}, 'swepam': {'level_2_cdaweb': 'swe_h0'}}}
 
 missionName = 'mms'
-dataNameDict = {missionName: {}}
-
 spacecraftNames = []
 mmsNumbers = [1]
 for mmsNumber in mmsNumbers:
     spacecraftNames.append(missionName+str(mmsNumber))
-
 #for i in range(4):
 #    spacecraftNames.append(missionName+str(i+1))
 #instrumentations = [['fpi', 'fast', 'l2', 'dis-moms'], ['fpi', 'brst', 'l2', 'dis-moms']]
@@ -32,11 +29,11 @@ for mmsNumber in mmsNumbers:
 #instrumentations = [['fgm', 'srvy', 'l2']]
 #instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
 #instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
-
+#instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
+dataNameDict = {missionName: {}}
 #directory = ot.Directory(lis=instrumentations)
 #directory.generate_dic_from_lis()
 #instrumentationsDict = directory.dic
-
 instrumentationsDict = {'feeps': {'srvy': {'l2': {'ion': {'2015':{}, '2016':{}, '2017': {}, '2018': {}}}}}}
 for spacecraftName in spacecraftNames:
     dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
@@ -51,8 +48,9 @@ for spacecraftName in spacecraftNames:
 #    dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 
 logFileDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/temp/downloadSPDF')
-if readFTP:
-    fileNamesSource = 'FTP'
+protocol = 'http'
+if readInternetForFileNames:
+    fileNamesSource = 'internet'
 else:
     fileNamesSource = 'from_log'
-downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource)
+downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource, protocol=protocol)
