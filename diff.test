@@ -1,0 +1,16 @@
+6,7c6
+< from importlib import reload
+< downloadSPDF = reload(downloadSPDF)
+---
+> import socket
+10c9,12
+<     downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
+---
+>     if socket.gethostname() == 'yufei-OptiPlex-5040-2':
+>         downloadDataDir = '/home/yufei/Documents/database/data' #This is where you want to store the downloaded files
+>     else:
+>         downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
+18c20
+< readInternetForFileNames = False # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
+---
+> readInternetForFileNames = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.

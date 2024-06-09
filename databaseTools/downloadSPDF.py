@@ -71,31 +71,46 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
     loggingHandlers = [logging.FileHandler(os.path.join(logFileDir, 'download.log'))]
     formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
                                   "%Y-%m-%d %H:%M:%S")
-    loggingHandlers[0].setFormatter(formatter)
     if verbose:
         loggingHandlers.append(logging.StreamHandler())
+    for handler in loggingHandlers:
+        handler.setFormatter(formatter)
     logging.basicConfig(level=logging.DEBUG, handlers=loggingHandlers)
 
     databaseDirs.append(downloadDataDir)
     databaseDirs = set(databaseDirs)
 
+    if protocol == 'ftp':
+        facts = ['size']
+    elif protocol == 'http':
+        facts = ['size-h']
+
     if fileNamesSource == 'internet':
         logging.info('reading {} for files to download'.format(host))
-        fileInfoDict = dbt.readFTPHTTPFileInfoRecursively(host=host, commonPath=remoteDataDir, path=dataNameDict, verbose=verbose, facts=['size'], logFileDir=logFileDir, protocol=protocol)
+        fileInfoDict = dbt.readFTPHTTPFileInfoRecursively(host=host, commonPath=remoteDataDir, path=dataNameDict, verbose=verbose, facts=facts, logFileDir=logFileDir, protocol=protocol)
     else:
         fileInfoDict = dbt.loadFileInfoDict(logFileDir=logFileDir)
 
     localFileDictTree = ot.DictTree()
     for databaseDir in databaseDirs:
         databaseDataDict = {databaseDir: dataNameDict}
-        fileInfoDictLocal = dbt.readFileInfoRecursively(path=databaseDataDict, verbose=verbose, facts=['size'])
+        fileInfoDictLocal = dbt.readFileInfoRecursively(path=databaseDataDict, verbose=verbose, facts=facts)
         localFileDictTree = localFileDictTree.union(fileInfoDictLocal[databaseDir])
     fileInfoDict = ot.DictTree(fileInfoDict)
     toDownload = fileInfoDict.difference(localFileDictTree)
 
     toDownloadList_ = toDownload.toList()
-    filePaths = [toD[:-2] for toD in toDownloadList_]
+    filePaths = []
+    total_size = 0 # in Bytes
+    for toD in toDownloadList_:
+        filePaths.append(toD[:-2])
+        if toD[-2] == 'size-h':
+            total_size += ot.sizeof(toD[-1])
+        elif toD[-2] == 'size':
+            total_size += float(toD[-1])
     print('number of files to download: {}'.format(len(filePaths)))
+    print('total size to download: {}'.format(ot.sizeof_fmt(total_size)))
+    import ipdb; ipdb.set_trace(context=5)
     #dbt.downloadFTPFromFileList(remoteFileNames=filePaths, host=host, ftpPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, tolerateFailure=tolerateFailure, blocksize=downloadBlocksize)
     ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=20, workerNumber=2, monitorInterval=10, protocol=protocol)
     ftpDownloader.processQueue()

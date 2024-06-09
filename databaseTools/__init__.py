@@ -285,10 +285,17 @@ class CDAWebHTMLParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.data_counts = 0
+        self.objFact = {}
 
     def handle_starttag(self, tag, attrs):
         if tag == 'a' and attrs[0][0] == 'href':
-            self.objName = attrs[0][1]
+            objName = attrs[0][1]
+            if objName[-1] == '/':
+                self.objName = attrs[0][1][:-1]
+                self.objFact['type'] = 'dir'
+            else:
+                self.objName = attrs[0][1]
+                self.objFact['type'] = 'file'
 
     def handle_endtag(self, tag):
         pass
@@ -296,13 +303,12 @@ class CDAWebHTMLParser(HTMLParser):
     def handle_data(self, data):
         self.data_counts += 1
         if self.data_counts == 3:
-            self.objFact = {}
             size = data.strip()
             if size == '-':
                 self.objFact['type'] = 'dir'
             else:
                 self.objFact['type'] = 'file'
-                self.objFact['size'] = size
+                self.objFact['size-h'] = size
 
 
 class HTTP(urllib3.PoolManager):
@@ -322,12 +328,12 @@ class HTTP(urllib3.PoolManager):
         if facts is None:
             return [(obj[0], None) for obj in objs]
         else:
-            if 'size' in facts:
-                for objName, objFact in objs:
-                    if 'size' in objFact:
-                        sizeStr = objFact.get('size')
-                        size_unit_map = {'K': 1024, 'M': 1024**2}
-                        objFact['size'] = float(sizeStr[:-1]) * int(size_unit_map[sizeStr[-1]])
+#            if 'size' in facts:
+#                for objName, objFact in objs:
+#                    if 'size' in objFact:
+#                        sizeStr = objFact.get('size')
+#                        size_unit_map = {'K': 1024, 'M': 1024**2}
+#                        objFact['size'] = float(sizeStr[:-1]) * int(size_unit_map[sizeStr[-1]])
             return [(obj[0], {key: obj[1].get(key) for key in facts}) for obj in objs]
 
     @staticmethod
@@ -698,7 +704,7 @@ class FileDownloadMonitor(threading.Thread):
         if fInd > self.fInd:
             self.fInd = fInd
             self.workerProgress = f.tell()
-            self.fInfo.put((fInd, f))
+        self.fInfo.put((fInd, f))
         time.sleep(self.monitorInterval)
         self.alarmingSize = self.alarmingSpeed * self.monitorInterval
         while not self.badWorker.is_set():
@@ -707,6 +713,7 @@ class FileDownloadMonitor(threading.Thread):
                 self.fInd = fInd
                 self.workerProgress = f.tell()
             elif fInd == self.fInd:
+                import ipdb; ipdb.set_trace(context=5)
                 workerProgress = f.tell()
                 self.check(workerProgress)
             self.fInfo.put((fInd, f))
@@ -1027,7 +1034,8 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
         facts_ = set(facts_)
         objs = client.mlsd(path=path, facts=facts_)
         for objName, objFact in objs:
-            objAbsName = '/'.join([path, objName])
+            objAbsName = str(PurePath(path, objName))
+#            objAbsName = '/'.join([path, objName])
             if objFact['type'] == 'dir':
                 fileInfoDict_ = readFTPHTTPFileInfoRecursively(client=client, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
                 fileInfoDict[objName] = fileInfoDict_
@@ -1035,6 +1043,8 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
                 del objFact['type']
                 if 'size' in facts:
                     objFact['size'] = int(objFact['size'])
+                if 'size-h' in facts:
+                    pass
                 fileInfoDict[objName] = objFact
                 if logFileHandle:
                     print(objAbsName, file=logFileHandle[1])
@@ -1107,6 +1117,8 @@ def readFileInfoRecursively(path='.', verbose=False, facts='stats'):
                         objFact = {}
                         if 'size' in facts:
                             objFact['size'] = stat.st_size
+                        if 'size-h' in facts:
+                            objFact['size-h'] = ot.sizeof_fmt(stat.st_size)[:-2]
                     elif facts is None:
                         objFact = {'name': obj.name}
                     fileInfoDict[obj.name] = objFact
@@ -1128,6 +1140,7 @@ def readFileInfoRecursively(path='.', verbose=False, facts='stats'):
     else:
         raise Exception('Error: path input error')
     return fileInfoDict
+
 
 
 def compareDictRecursively(d1, d2):
@@ -1330,9 +1343,8 @@ def isComplete(fileName, start, end, dataset, dataFormat='CDF', fileType='r:gz')
             return True
     except:
         with open('error.log','a') as file:
-            file.write(fileName+' exception\n')            
+            file.write(fileName+' exception\n')
         return False
-            
 
 def transformPDSdataToCDF(databaseDir, dataTransDict=None, stringCriteria=['FGM_KSM_1M'], infoFileExtension='.LBL', cdfFileNameFMT=None, recordPath=None):
     raise Exception('This function was moved to the submodule databaseDataFormat')
