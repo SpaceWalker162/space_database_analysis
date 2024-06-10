@@ -71,10 +71,10 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
     loggingHandlers = [logging.FileHandler(os.path.join(logFileDir, 'download.log'))]
     formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
                                   "%Y-%m-%d %H:%M:%S")
-    if verbose:
-        loggingHandlers.append(logging.StreamHandler())
     for handler in loggingHandlers:
         handler.setFormatter(formatter)
+    if verbose:
+        loggingHandlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.DEBUG, handlers=loggingHandlers)
 
     databaseDirs.append(downloadDataDir)
