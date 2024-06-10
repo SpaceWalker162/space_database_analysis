@@ -713,7 +713,6 @@ class FileDownloadMonitor(threading.Thread):
                 self.fInd = fInd
                 self.workerProgress = f.tell()
             elif fInd == self.fInd:
-                import ipdb; ipdb.set_trace(context=5)
                 workerProgress = f.tell()
                 self.check(workerProgress)
             self.fInfo.put((fInd, f))
