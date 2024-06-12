@@ -590,9 +590,12 @@ class FileDownloadCommander:
     def killWorkerAndMonitor(self, i):
         self.workers[i].kill()
         self.monitors[i].kill()
+        self.workers[i].join()
+        self.monitors[i].join()
         del self.workers[i]
         del self.monitors[i]
         logging.debug('A worker is fired')
+        logging.info('active threads: {}'.format(threading.active_count()))
 
 
 class FileDownloader(threading.Thread):
@@ -642,13 +645,11 @@ class FileDownloader(threading.Thread):
                         resp.release_conn()
                     fInd, f = self.fInfo.get()
             except KeyboardInterrupt:
-                self.ftp.abort()
-                self.ftp.quit()
-                os.remove(dstName)
-                logging.info("File Removed: {}".format(dstName))
+                self._handle_exception_during_downloading(f)
                 raise KeyboardInterrupt
             except Exception as e:
                 logging.info(e)
+                self._handle_exception_during_downloading(f)
                 logging.info('failed in downloading {}'.format(srcName))
                 raise
             timeCost = datetime.now()-downloadStart
@@ -657,6 +658,16 @@ class FileDownloader(threading.Thread):
             logging.info('{} downloaded at {}'.format(dstName, datetime.now()))
             logging.info(" size: {}M, time cost: {}, download speed: {:.3f}M/s" .format(fileSizeInM, timeCost, speed))
             self.finishedAWork.set()
+
+    def _handle_exception_during_downloading(self, f):
+        if hasattr(self, 'ftp'):
+            self.ftp.abort()
+            self.ftp.quit()
+        dstName = f.name
+        f.close()
+        os.remove(dstName)
+        logging.info("File Removed: {}".format(dstName))
+
 
     def get_id(self):
         # returns id of the respective thread
