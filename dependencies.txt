@@ -2,3 +2,4 @@
 cdflib
 cdasws
 wolframclient
+spacepy

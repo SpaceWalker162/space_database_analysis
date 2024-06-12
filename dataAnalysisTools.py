@@ -60,12 +60,12 @@ class mms:
             self.spacecrafts = spacecrafts
         self.data = {}
 
-    def chargeCalculation(self, datetimeRange, mode='fast', **kwargs):
+    def _load_edp_mec(self, datetimeRange, mode='fast', **kwargs):
+        try:
+            quality_from = kwargs.pop('quality_from')
+        except: quality_from = None
         for spacecraft in self.spacecrafts:
             spacecraftName = spacecraft.name
-            try:
-                quality_from = kwargs.pop('quality_from')
-            except: quality_from = None
             if quality_from is None:
                 quality_from = 'quality'
             if quality_from == 'quality':
@@ -92,6 +92,9 @@ class mms:
             spacecraft.data[source] = mask_dict_of_ndarray(spacecraft.data[source], quality_mask)
             quat_dsl_to_gse = sppcoo.quaternionMultiply(sppcoo.quaternionConjugate(spacecraft.data['MEC89Q']['quat_eci_to_dsl']), spacecraft.data['MEC89Q']['quat_eci_to_gse'])
             spacecraft.data['MEC89Q']['quat_dsl_to_gse'] = quat_dsl_to_gse
+
+    def chargeCalculation(self, datetimeRange, mode='fast', **kwargs):
+        self._load_edp_mec(datetimeRange=datetimeRange, mode=mode, **kwargs)
         data = self.chargeCalculationWithDataLoaded(self.spacecrafts)
         self.data.update(data)
 
@@ -133,6 +136,7 @@ class mms:
         data['timingShape'] = timingShape[0][:, -1]/timingShape[0][:, 0]
         data['x_gse'] = xGSEConstellationCenter
         return data
+
 
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
