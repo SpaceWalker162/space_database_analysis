@@ -189,7 +189,7 @@ class Spacecraft:
             instrumentationRetrivingName: a string.
             datasetAndVariables: this parameter should not be used by user.
             instrumentationVariablesWithRetrivingName: a dictionary in terms of the path to the datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'Cluster': {'C1' : {'C1_CP_FGM_FULL': ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]}}, 'mms': {'mms1': {'fgm': {'brst': {'l2': ['fgmBrst', ('Epoch', 't'), ('Btotal', 'BTotal')]}}}}}. Please note that 'Epoch' and 'Btotal' are improvised. This parameter may also be a list of lists, with each sublist in the form of ['Cluster', 'C1', 'C1_CP_FGM_FULL', ['FGM', ('time_tags__C1_CP_FGM_FULL', 't'), ('B_vec_xyz_gse__C1_CP_FGM_FULL', 'B')]]. To retrieve data, for example, of 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
-            datasets_variables_with_retrieving_names: a dictionary of datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'MMS1_FGM_SRVY_L2': ['FGM', ('Epoch', 't'), ('mms1_fgm_srvy_l2_bvec_gse', 'B')], 'MMS2_FPI_FAST_L2_DIS-MOMS': ['fgmBrst', ('Epoch', 't'), ('mms2_fpi_fast_l2_dis-moms_density', 'n')]}. Please note that 'Epoch' and 'Btotal' are improvised. To retrieve data 'B_vec_xyz_gse__C1_CP_FGM_FULL', use C1.data['FGM']['B']
+            datasets_variables_with_retrieving_names: a dictionary of datasets. Its leaf value is a list of variable names. The names are defined by the corresponding cdfFile. For example, {'MMS1_FGM_SRVY_L2': ['FGM', ('Epoch', 't'), ('mms1_fgm_srvy_l2_bvec_gse', 'B')], 'MMS2_FPI_FAST_L2_DIS-MOMS': ['FPI', ('Epoch', 't'), ('mms2_fpi_fast_l2_dis-moms_density', 'n'), 'mms2_fpi_fast_l2_dis-moms_velocity_gse']}. Please note that 'Epoch' and 'Btotal' are improvised. To retrieve data 'B_vec_xyz_gse__C1_CP_FGM_FULL', use spacecraft.data['FGM']['B'], to retrieve 'mms2_fpi_fast_l2_dis-moms_velocity_gse', use spacecraft.data['FPI']['mms2_fpi_fast_l2_dis-moms_velocity_gse']
             fromFile: to load data from a file, the file name is given by this parameter.
             sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
         Note:
@@ -209,7 +209,13 @@ class Spacecraft:
             datasets_info = loadDatasets_info(self.workDataDir, self.workDataDirsBak, copy_if_not_exist=copy_if_not_exist)
             for datasetID, item in datasets_variables_with_retrieving_names.items():
                 datasetRetrievingName = item[0]
-                variableNamesAndRetrievingNames = item[1:]
+                variableNamesAndRetrievingNames_ = item[1:]
+                variableNamesAndRetrievingNames = []
+                for varRet in variableNamesAndRetrievingNames_:
+                    if type(varRet) is str:
+                        variableNamesAndRetrievingNames.append((varRet, varRet))
+                    elif type(varRet) is tuple:
+                        variableNamesAndRetrievingNames.append(varRet)
                 variableNames = [varRet[0] for varRet in variableNamesAndRetrievingNames]
                 dataset_info = datasets_info.get(datasetID)
                 if dataset_info:

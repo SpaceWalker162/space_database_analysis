@@ -103,8 +103,14 @@ class mms:
     def chargeCalculationWithDataLoaded(spacecrafts):
         numberOfSpacecrafts = len(spacecrafts)
         source = 'EDP'
-        data_list = [np.concatenate((spacecraft.data[source]['E'], spacecraft.data[source]['E_err']), axis=-1) for spacecraft in spacecrafts]
-        t_list = [spacecraft.data[source]['t'] for spacecraft in spacecrafts]
+        t_list = []
+        data_list = []
+        for spacecraft in spacecrafts:
+            t_ = spacecraft.data[source]['t']
+            data_ = np.concatenate((spacecraft.data[source]['E'], spacecraft.data[source]['E_err']), axis=-1)
+            mask_ = ~np.isnan(data_).any(axis=-1)
+            data_list.append(data_[mask_])
+            t_list.append(t_[mask_])
         resamplingT, synchronized_data = data_synchronization(data_list, t_list)
         EAllSpacecrafts = synchronized_data[..., :3]
         EErrAllSpacecrafts = synchronized_data[..., 3:]
@@ -636,19 +642,25 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     try:
         _ = kwargs.pop('gap_threshold')
     except: pass
-    if gap_threshold is None:
-        gap_threshold = 5*np.min(tdiff)
-    break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
-    break_points = np.insert(break_points, 0, 0)
-    break_points = np.append(break_points, len(x))
-    plots_ = []
-    for ind in range(len(break_points)-1):
-        s_ = slice(*break_points[ind:ind+2])
-        x_ = x[s_]
-        y_ = y[s_]
-        plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
-        plots_.append(plot_)
-    return plots_
+    try:
+        enable = kwargs.pop('enable')
+    except: enable = True
+    if enable:
+        if gap_threshold is None:
+            gap_threshold = 5*np.min(tdiff)
+        break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
+        break_points = np.insert(break_points, 0, 0)
+        break_points = np.append(break_points, len(x))
+        plots_ = []
+        for ind in range(len(break_points)-1):
+            s_ = slice(*break_points[ind:ind+2])
+            x_ = x[s_]
+            y_ = y[s_]
+            plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
+            plots_.append(plot_)
+        return plots_
+    else:
+        return self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
 
 mpl.axes.Axes.plot_time_series = plot_time_series
 
