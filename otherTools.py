@@ -273,17 +273,36 @@ def decimal2binaryArray(array, order='>'):
     return np.moveaxis(binary_array, 0, -1)
 
 
-def sizeof_fmt(num, suffix="B"):
-    for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
-        if abs(num) < 1024.0:
-            return f"{num:3.1f}{unit}{suffix}"
-        num /= 1024.0
-    return f"{num:.1f}Yi{suffix}"
+def sizeof_fmt(num, suffix="B", fmt=True):
+    if fmt:
+        for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+            if abs(num) < 1024.0:
+                return f"{num:3.1f}{unit}{suffix}"
+            num /= 1024.0
+        return f"{num:.1f}Yi{suffix}"
+    else:
+        for unit in ("", "Ki", "Mi", "Gi", "Ti", "Pi", "Ei", "Zi"):
+            if abs(num) < 1024.0:
+                return f"{num}{unit}{suffix}"
+            num /= 1024.0
+        return f"{num}Yi{suffix}"
 
 def sizeof(string):
+    '''
+    transform 2.3M into 2.3*1024**2
+
+    '''
     unit_map = {'K': 1, 'M': 2, 'G': 3, 'T': 4, 'P': 5, 'E': 6, 'Z': 7}
     try:
         _ = int(string[-1])
         return float(string)
     except:
         return float(string[:-1]) * 1024**unit_map[string[-1]]
+
+def round_number(num, ndigs=0):
+    if ndigs:
+        return round_number(num*10**ndigs)/10**ndigs
+    if num - int(num) == 0.5:
+        return int(np.ceil(num))
+    else:
+        return round(num)

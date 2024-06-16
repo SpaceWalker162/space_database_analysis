@@ -308,6 +308,8 @@ class CDAWebHTMLParser(HTMLParser):
                 self.objFact['type'] = 'dir'
             else:
                 self.objFact['type'] = 'file'
+#                if size[-3] == '.':
+#                    size = str(ot.round_number(float(size[:-1]))) + size[-1]
                 self.objFact['size-h'] = size
 
 
@@ -1128,7 +1130,13 @@ def readFileInfoRecursively(path='.', verbose=False, facts='stats'):
                         if 'size' in facts:
                             objFact['size'] = stat.st_size
                         if 'size-h' in facts:
-                            objFact['size-h'] = ot.sizeof_fmt(stat.st_size)[:-2]
+                            ss_ = ot.sizeof_fmt(stat.st_size, fmt=False)[:-2].strip()
+                            num = float(ss_[:-1])
+                            if num >= 9.95:
+                                sizeH = str(ot.round_number(num)) + ss_[-1]
+                            else:
+                                sizeH = str(ot.round_number(num, 1)) + ss_[-1]
+                            objFact['size-h'] = sizeH
                     elif facts is None:
                         objFact = {'name': obj.name}
                     fileInfoDict[obj.name] = objFact
