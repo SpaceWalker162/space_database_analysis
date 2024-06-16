@@ -929,7 +929,7 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
         parameters associated with "evenlySpaced":
             tStepPecentageCriterion: In the general case of irregually epoch records, there are multiple possible time steps between consecutive records. The portion of the most frequent temporal step in all occurance of all time steps should be larger than this parameter, otherwise the program raise exception.
             lowpassCutoff: lowpass cutoff frequency.
-            gapThreshold: a number. The t is divided into blocks of t such that the gap between consecutive blocks is larger than gapThreshold.
+            gapThreshold: can be a number, in which case the t is divided into blocks of t such that the gap between consecutive blocks is larger than gapThreshold. or a string in the form of 'num*', such as '3*', which set the gapThreshold to be three times the minimum gap in the t.
             minNumberOfPoints: the minimum number of points in every block.
         parameters associated with "original":
             badpointsMask: an vector of true and false representing at which time stamp the data is bad.
@@ -948,10 +948,14 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
     if resamplingT is None:
         if tDistribution == 'evenlySpaced':
             tDiff = np.diff(t)
+            if type(gapThreshold) is str and gapThreshold[-1] == '*':
+                gapThreshold = float(gapThreshold[:-1])*np.min(tDiff)
             if gapThreshold:
-                section = 1 + np.argwhere(tDiff > gapThreshold)
+                section = 1 + np.argwhere(tDiff > gapThreshold).squeeze()
+                if len(section.shape) == 0:
+                    section = np.array([section])
                 tBlocks = np.split(t, section) # each element in tBlocks is a consecutive time series in which the maximal gap ls less than gapThreshold
-                dataBlocks = np.aplit(data, section, axis=axis)
+                dataBlocks = np.split(data, section, axis=axis)
             else:
                 tBlocks = [t]
                 dataBlocks = [data]
@@ -976,7 +980,7 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
                             shiftQ = False
                         else:
                             shiftQ = True
-                        tHomogeneous = np.arange(t[0], t[-1], tStep)
+                        tHomogeneous = np.arange(tBlock[0], tBlock[-1], tStep)
 #                        cs = interpolate.CubicSpline(tBlock, dataBlock, axis=axis)
 #                        dataBlockHomogeneous = cs(tHomogeneous)
                         dataBlockHomogeneous = linear_interpolate_array(tHomogeneous, tBlock, dataBlock, axis=axis)
@@ -2054,7 +2058,7 @@ def concatenate_dict_of_ndarray(dic_list, axis=None):
 def arg_split(data, gap_threshold=1):
     '''
     data: 1d ndarray
-    t_gap: in seconds
+    gap_threshold: can be a number, in which case the data is divided into blocks such that the gap between consecutive blocks is larger than gap_threshold. or a string in the form of 'num*', such as '3*', which set the gap_threshold to be three times the minimum gap in the data.
     return:
         break_points: the split data is retrieved by
             data_split = []
@@ -2063,9 +2067,24 @@ def arg_split(data, gap_threshold=1):
                 data_split.append(data[s_])
     '''
     tdiff = np.diff(data)
+    if type(gap_threshold) is str and gap_threshold[-1] == '*':
+        gap_threshold = float(gap_threshold[:-1])*np.min(tdiff)
     break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
     break_points = np.insert(break_points, 0, 0)
     break_points = np.append(break_points, len(data))
     return break_points
 
-#np.array([np.arange(6).reshape((2,3))]).swapaxes(0, -1)
+
+def data_split(data, gap_threshold=1):
+    '''
+    data: 2d ndarray with data[:, 0] be the time data acoording to which the data will be splited.
+    gap_threshold: can be a number, in which case the data is divided into blocks such that the gap between consecutive blocks is larger than gap_threshold. or a string in the form of 'num*', such as '3*', which set the gap_threshold to be three times the minimum gap in the data.
+    return:
+    '''
+    t = data[..., 0]
+    break_points = arg_split(t, gap_threshold=gap_threshold)
+    data_split = []
+    for ind in range(len(break_points)-1):
+        s_ = slice(*break_points[ind:ind+2])
+        data_split.append(data[s_])
+    return data_split
