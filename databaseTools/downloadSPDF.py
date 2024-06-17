@@ -6,7 +6,7 @@ import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 #import reconnecting_ftp
 
-def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2):
+def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2):
     '''
     Purpose:
         download data files from CDAWeb through FTP
@@ -16,37 +16,49 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
 
     import os
     import copy
+    import sys
     import space_database_analysis.otherTools as ot
-    from space_database_analysis.databaseTools.downloadSPDF import downloadSPDF
+    import space_database_analysis.databaseTools.downloadSPDF as downloadSPDF
+    import socket
 
-    downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
-    #downloadDataDir = '..\\data'
+    if sys.platform == 'linux':
+        if socket.gethostname() == 'yufei-OptiPlex-5040-2':
+            downloadDataDir = '/home/yufei/Documents/database' #This is where you want to store the downloaded files
+        else:
+            downloadDataDir = '/media/yufei/Elements/database' #This is where you want to store the downloaded files
+        databaseDirs = ['/home/yufei/Documents/remoteDatabase'] #This is a list that contain all database. The files that exist in these databases will be omitted in downloading.
+    elif sys.platform == 'win32':
+        downloadDataDir = '..\\database'
+        databaseDirs = ['\\\\10.249.183.237\\pub']
 
-    databaseDirs = ['/home/yufei/Documents/remoteDatabase'] #This is a list that contain all database. The files that exist in these databases will be omitted in downloading.
-    #databaseDirs = ['\\\\10.249.183.237\\data']
     #databaseDirs = []
 
-    readFTP = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
+    readInternetForFileNames = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
 
     #dataNameDict = {'ace': {'mag': {'level_2_cdaweb': 'mfi_h3'}, 'swepam': {'level_2_cdaweb': 'swe_h0'}}}
 
-    missionName = 'mms'
-    spacecraftNames = []
-    mmsNumbers = [1,2]
-    for mmsNumber in mmsNumbers:
-        spacecraftNames.append(missionName+str(mmsNumber))
+    #missionName = 'mms'
+    #spacecraftNames = []
+    #mmsNumbers = [1]
+    #for mmsNumber in mmsNumbers:
+    #    spacecraftNames.append(missionName+str(mmsNumber))
     #for i in range(4):
     #    spacecraftNames.append(missionName+str(i+1))
     #instrumentations = [['fpi', 'fast', 'l2', 'dis-moms'], ['fpi', 'brst', 'l2', 'dis-moms']]
     #instrumentations = [['mec', 'srvy', 'l2', 'epht89q'], ['mec', 'srvy', 'l2', 'epht89d']]
     #instrumentations = [['fgm', 'srvy', 'l2']]
-    instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
-    #instrumentations = [['fpi', 'fast', 'l2', 'dis-moms', '2016']]
-    dataNameDict = {missionName: {}}
-    instrumentationsDict = ot.list2dict(instrumentations)
-    for spacecraftName in spacecraftNames:
-        dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
+    #instrumentations = [['edp', 'slow', 'l2', 'dce', '2019'], ['edp', 'fast', 'l2', 'dce', '2019']]
+    #instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
+    #instrumentations = [['fpi', 'fast', 'l2', 'dis-partmoms', '2015'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2016'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2017'], ['fpi', 'fast', 'l2', 'dis-partmoms', '2018']]
+    #dataNameDict = {missionName: {}}
+    #directory = ot.Directory(lis=instrumentations)
+    #directory.generate_dic_from_lis()
+    #instrumentationsDict = directory.dic
+    #instrumentationsDict = {'feeps': {'srvy': {'l2': {'ion': {'2015':{}, '2016':{}, '2017': {}, '2018': {}}}}}}
+    #for spacecraftName in spacecraftNames:
+    #    dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
     #
+    dataNameDict = {'wind': {'3dp': {'3dp_plsp': {}}}}
 
     #missionName = 'themis'
     #spacecraftNames = ['thc', 'thd']
@@ -57,7 +69,13 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
     #    dataNameDict[missionName][spacecraftName] = copy.deepcopy(instrumentationsDict)
 
     logFileDir = os.path.expanduser('~/Documents/MyFiles/works/project_working/temp/downloadSPDF')
-    downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir)
+    protocol = 'http'
+    if readInternetForFileNames:
+        fileNamesSource = 'internet'
+    else:
+        fileNamesSource = 'from_log'
+    downloadSPDF.downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource, protocol=protocol)
+    print('end')
     >>>>>>>>>>>>> Example >>>>>>>>>>>>>
 
 
@@ -66,6 +84,7 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
     remoteDataDir = '/pub/data' #ftp database directory
     verbose = True
     downloadBlocksize = 1024*32
+    downloadDataDir = os.path.join(downloadDatabaseDir, 'data')
 
     os.makedirs(logFileDir, exist_ok=True)
     loggingHandlers = [logging.FileHandler(os.path.join(logFileDir, 'download.log'))]
@@ -77,8 +96,9 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
         loggingHandlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.DEBUG, handlers=loggingHandlers)
 
-    databaseDirs.append(downloadDataDir)
+    databaseDirs.append(downloadDatabaseDir)
     databaseDirs = set(databaseDirs)
+    databaseDataDirs = [os.path.join(databaseDir_, 'data') for databaseDir_ in databaseDirs]
 
     if protocol == 'ftp':
         facts = ['size']
@@ -92,10 +112,10 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
         fileInfoDict = dbt.loadFileInfoDict(logFileDir=logFileDir)
 
     localFileDictTree = ot.DictTree()
-    for databaseDir in databaseDirs:
-        databaseDataDict = {databaseDir: dataNameDict}
+    for databaseDataDir in databaseDataDirs:
+        databaseDataDict = {databaseDataDir: dataNameDict}
         fileInfoDictLocal = dbt.readFileInfoRecursively(path=databaseDataDict, verbose=verbose, facts=facts)
-        localFileDictTree = localFileDictTree.union(fileInfoDictLocal[databaseDir])
+        localFileDictTree = localFileDictTree.union(fileInfoDictLocal[databaseDataDir])
     fileInfoDict = ot.DictTree(fileInfoDict)
     toDownload = fileInfoDict.difference(localFileDictTree)
 
@@ -110,7 +130,6 @@ def downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, fileNamesSource='i
             total_size += float(toD[-1])
     print('number of files to download: {}'.format(len(filePaths)))
     print('total size to download: {}'.format(ot.sizeof_fmt(total_size)))
-    #dbt.downloadFTPFromFileList(remoteFileNames=filePaths, host=host, ftpPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, tolerateFailure=tolerateFailure, blocksize=downloadBlocksize)
     ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=20, workerNumber=workerNumber, monitorInterval=10, protocol=protocol)
     ftpDownloader.processQueue()
     print('End of the Program')

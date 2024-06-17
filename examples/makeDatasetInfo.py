@@ -3,7 +3,6 @@ import space_database_analysis.databaseTools as dbt
 import space_database_analysis.databaseUserTools as dut
 
 if __name__ == '__main__':
-    dbt = reload(dbt)
     databasePath = os.path.expanduser('~/Documents/remoteDatabase')
     database = dbt.Database([databasePath])
     database.make_additional_datasets_info()

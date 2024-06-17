@@ -8,6 +8,7 @@ import cdflib    # see github.com/MAVENSDC/cdflib
 #import tarfile
 from datetime import datetime
 from datetime import timedelta
+import shutil
 import os
 import sys
 import subprocess
@@ -92,7 +93,7 @@ missionInfo = {
 _epoch_types = ['CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000']
 
 
-class Database:
+class Database(dbt.Database):
     '''
 
     '''
@@ -324,7 +325,9 @@ class Dataset:
                     something
         '''
         self.databasePath = databasePath
+        self.database = dbt.Database(databasePaths=[databasePath])
         self.databaseBakPaths = databaseBakPaths
+        self.databaseBak = dbt.Database(databasePaths=databaseBakPaths)
         self.dataPath = os.path.join(self.databasePath, 'data')
         self.dataBakPaths = [os.path.join(databaseBakPath, 'data') for databaseBakPath in self.databaseBakPaths]
         if dataset_info:
@@ -353,6 +356,12 @@ class Dataset:
             dataset_file_time_gap = timedelta(days=1)
         self.dataset_file_time_gap = dataset_file_time_gap
         logging.debug('dataset file time gap: {}'.format(dataset_file_time_gap))
+
+        self.datasetPathInDatabaseData = self.dataset_info.get('dataset_path')
+        if not self.datasetPathInDatabaseData:
+            self.datasetPathInDatabaseData = os.path.join(*self.datasetID.lower().split('_'))
+        self.datasetAbsolutePath = os.path.join(self.dataPath, self.datasetPathInDatabaseData)
+        self.datasetAbsoluteBakPaths = [os.path.join(dataBakPath, self.datasetPathInDatabaseData) for dataBakPath in self.dataBakPaths]
 
     def _get_file_time_limits(self, dateTime):
         if isinstance(self.dataset_file_time_gap, timedelta):
@@ -442,8 +451,9 @@ class Dataset:
 #        search_criteria.update({'searchMethod': searchMethod, 'strings': criteria, 'timeTag': timeTag, 'size': size})
         return search_criteria
 
-    def _get_file_path(self, absolutePathToDataset, dateTime=None, search_func=None, **search_criteria):
+    def _get_file_paths(self, absolutePathToDataset, dateTime=None, search_func=None, **search_criteria):
         '''
+        find file path under dataset path
         Parameters:
             search_func: a function having input [directory, **search_criteria] to search for the file in the directory meeting criteria defined by search_criteria.
         '''
@@ -461,82 +471,104 @@ class Dataset:
                 fileNames = search_func(absolutePathToDatasetYearMonth, **search_criteria)
         filePaths = [os.path.join(absolutePathToFile, fileName) for fileName in fileNames]
         numFiles = len(filePaths)
-        filePath = None
-        if numFiles == 1:
-            filePath = filePaths[0]
-            logging.info("file found: {}".format(filePath))
-        elif numFiles == 0:
+#        filePath = None
+        if numFiles == 0:
             logging.warning("No file was found under {}".format(absolutePathToDataset))
-        elif numFiles > 1:
-            logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
-        return filePath
+#        elif numFiles == 1:
+#            filePath = filePaths[0]
+#            logging.info("file found: {}".format(filePath))
+#        elif numFiles > 1:
+#            logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
+        return filePaths
 
-    def _get_file_path_from_multiple_resources(self, beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=True, search_online=False, **para):
-        search_func = findFileNames
-        search_criteria = self._define_search_criteria(beginOfTheFilePeriod=beginOfTheFilePeriod, endOfTheFilePeriod=endOfTheFilePeriod, dateTime=None, size='allSize', **para)
-        datasetPathInDatabase = self.dataset_info.get('dataset_path')
-        if not datasetPathInDatabase:
-            datasetPathInDatabase = os.path.join(*self.datasetID.lower().split('_'))
-        datasetAbsolutePath = os.path.join(self.dataPath, datasetPathInDatabase)
-        logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
-        filePath = self._get_file_path(datasetAbsolutePath, dateTime=beginOfTheFilePeriod, search_func=search_func, **search_criteria)
-        if filePath:
-            pass
-        else:
-            if self.dataBakPaths:
-                for dataPathBak in self.dataBakPaths:
-                    datasetAbsolutePath = os.path.join(dataPathBak, datasetPathInDatabase)
-                    filePath = self._get_file_path(datasetAbsolutePath, dateTime=beginOfTheFilePeriod, search_func=search_func, **search_criteria)
-                    if filePath:
-                        if copy_if_not_exist:
-                            destFilePath = workDataDirCopy(filePath, self.dataPath, dataPathBak)
-                            filePath = destFilePath
+    def _get_file_paths_from_multiple_sources(self, datetimeRange, dateTime=None, copy_if_not_exist=True, search_online=False, search_method='regular', **para):
+        '''
+        Parameters:
+            search_method: when searching for files of a dataset whose interval are regularlly divided, let search_method='regular'. While the intervals are not regularlly distributed, such as those of mms brst data, use 'irregular'.
+
+        '''
+        if search_method == 'regular':
+            search_func = findFileNames
+            search_criteria = self._define_search_criteria(*datetimeRange, dateTime=None, size='allSize', **para)
+            logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
+        elif search_method == 'irregular':
+            search_func = findFileNamesInTimeRange
+            search_criteria = {'timeRange': datetimeRange, 'getTimeFromNameFunc': getTimeFromName}
+
+        filePaths = self._get_file_paths(self.datasetAbsolutePath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria)
+
+        if self.dataBakPaths:
+            for datasetAbsoluteBakPath in self.datasetAbsoluteBakPaths:
+                fileBakPaths = self._get_file_paths(datasetAbsoluteBakPath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria)
+                for fileBakPath in fileBakPaths:
+                    destFilePath = os.path.join(self.datasetAbsolutePath, os.path.relpath(fileBakPath, datasetAbsoluteBakPath))
+                    if destFilePath in filePaths:
+                        pass
+                    elif copy_if_not_exist:
+                        logging.info('now copying {} to {} ...'.format(fileBakPath, destFilePath))
+                        os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+                        shutil.copy2(fileBakPath, destFilePath)
+                        logging.info('file copied')
+                        filePaths.append(destFilePath)
+                    else:
+                        filePaths.append(fileBakPath)
+
+        if search_online:
+            filePaths = self.get_online_files(datetimeRange=datetimeRange, search_criteria=search_criteria)
+
+        return filePaths
+
+
+    def get_online_files(self, datetimeRange, **para):
+        cdaswsObj = cdasws.CdasWs()
+        logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(self.datasetID, *datetimeRange))
+        try:
+            status, files = cdaswsObj.get_original_files(self.datasetID, *datetimeRange)
+            allFileNames = [file_['Name'] for file_ in files]
+            logging.info('files found from CDAWeb for the temporal period: {} -- {}\n {}'.format(*datetimeRange, allFileNames))
+            file = None
+            search_criteria = para.get('search_criteria')
+            if search_criteria:
+                for file_ in files:
+                    strings = search_criteria['strings']
+                    if all(string in file_['Name'] for string in strings):
+                        file = file_
                         break
-            if not filePath and search_online:
-                cdaswsObj = cdasws.CdasWs()
-                logging.info('looking for files from CDAWeb with dataset ID {} for time period {} -- {} ...'.format(self.datasetID, beginOfTheFilePeriod, endOfTheFilePeriod))
-                try:
-                    status, files = cdaswsObj.get_original_files(self.datasetID, beginOfTheFilePeriod, endOfTheFilePeriod)
-                    allFileNames = [file_['Name'] for file_ in files]
-                    logging.info('files found from CDAWeb for the temporal period: {} -- {}\n {}'.format(beginOfTheFilePeriod, endOfTheFilePeriod, allFileNames))
-                    file = None
-                    for file_ in files:
-                        strings = search_criteria['strings']
-                        if all(string in file_['Name'] for string in strings):
-                            file = file_
-                            break
+                fileURL = file['Name']
+                o = urlparse(fileURL)
+                filePathInDatabase = os.path.join(*o.path.split('/')[3:])
+                destFilePath = os.path.join(self.dataPath, filePathInDatabase)
+                os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+                logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
+                urlretrieve(fileURL, destFilePath)
+                logging.info('downloaded')
+                return [destFilePath]
+            else:
+                downloadedFiles = []
+                for file in files:
                     fileURL = file['Name']
                     o = urlparse(fileURL)
-                    filePathInDatabase = os.path.join(*o.path.split('/')[3:])
-                    destFilePath = os.path.join(self.dataPath, filePathInDatabase)
+                    filePathInDatabase = os.path.join(*o.path.split('/')[2:])
+                    if self.database._check_exist_file(filePathInDatabase):
+                        continue
+                    elif self.databaseBak._check_exist_file(filePathInDatabase):
+                        continue
+                    destFilePath = os.path.join(self.database.path, filePathInDatabase)
                     os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
                     logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
                     urlretrieve(fileURL, destFilePath)
                     logging.info('downloaded')
-                    filePath = destFilePath
-                except TypeError:
-                    pass
-        return filePath
+                    downloadedFiles.append(destFilePath)
+                return downloadedFiles
+        except TypeError:
+            pass
 
-    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False, sparse_factor=None):
-        '''
-        Parameter:
-            sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
-        '''
-        self.datetimeRange = datetimeRange
-        self.variables_to_load = variableNames
-        start, end = self.datetimeRange
 
-        start_ = start
+    def _load_data_from_files(self, filePaths, variableNames, datetimeRange=None, sparse_factor=None):
         variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
         variablesInADatasetIndependantOnTime = []
-        while start_ < end:
-            beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(start_)
-            if endOfTheFilePeriod >= end:
-                datetimeRange = [start_, end]
-            else:
-                datetimeRange = [start_, endOfTheFilePeriod]
-            filePath = self._get_file_path_from_multiple_resources(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+        varInfoDict = {}
+        for filePath in filePaths:
             if not filePath:
                 logging.debug('data file not found')
             else:
@@ -550,11 +582,44 @@ class Dataset:
                     dataMajor = dat.mask_dict_of_ndarray(dataMajor, slice(0, numberOfRecords, sparse_factor), copy=True)
                 variablesInADatasetOverDatetimeRange.append(dataMajor)
                 variablesInADatasetIndependantOnTime.append(dataAux)
-            start_ = endOfTheFilePeriod
-        variables = {}
-        if len(variablesInADatasetOverDatetimeRange) > 0:
-            for var in variablesInADatasetOverDatetimeRange[0].keys():
-                variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+        return variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict
+
+    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False, sparse_factor=None):
+        '''
+        Parameter:
+            sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
+        '''
+        self.data = {}
+        self.varInfoDict = {}
+        self.datetimeRange = datetimeRange
+        self.variables_to_load = variableNames
+        start, end = self.datetimeRange
+
+        if 'brst' in self.datasetID.lower():
+            filePaths = self._get_file_paths_from_multiple_sources(datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, search_method='irregular')
+        else:
+            start_ = start
+            filePaths = []
+            while start_ < end:
+                beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(start_)
+                if endOfTheFilePeriod >= end:
+                    datetimeRange = [start_, end]
+                else:
+                    datetimeRange = [start_, endOfTheFilePeriod]
+                filePaths_ = self._get_file_paths_from_multiple_sources(datetimeRange=(beginOfTheFilePeriod, endOfTheFilePeriod), dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                if filePaths_:
+                    filePaths.append(filePaths_[0])
+                start_ = endOfTheFilePeriod
+        if not filePaths:
+            logging.debug('data file not found')
+        else:
+            variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict = self._load_data_from_files(filePaths, variableNames, datetimeRange=datetimeRange, sparse_factor=sparse_factor)
+            variables = {}
+            if len(variablesInADatasetOverDatetimeRange) > 0:
+                for var in variablesInADatasetOverDatetimeRange[0].keys():
+                    variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+            else:
+                logging.warning('no data over time found for this load of dataset')
             for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
                 logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
                 for key in variablesInADatasetIndependantOnTime[fileInd].keys():
@@ -562,12 +627,18 @@ class Dataset:
             variables.update(variablesInADatasetIndependantOnTime[0])
             self.data = variables
             self.varInfoDict = varInfoDict
-        else:
-            logging.warning('no data found for this load of dataset')
-            self.data = {}
-            self.varInfoDict = {}
 
     def findDataFiles(self):
+        pass
+
+    def get_data(var, datetimeRange=None):
+        '''
+        get data of a variable in a time interval
+
+        Parameters:
+            var: the name of the variable
+            datetimeRange: if None, the data stored in the memory will be returned. Otherwise it should be a list of two datetime objects. If additional data need to be loaded into the memory to fulfill the datetime range, the function will do so and return.
+        '''
         pass
 
 class CelestialReferenceFrames:
@@ -889,6 +960,15 @@ def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf', 
         foundFileNames = []
     return foundFileNames
 ##
+def findFileNamesInDatetimeRange(path, datetimeRange):
+    '''
+    This function is dedicated to find filenames in the form of mms1_fgm_brst_l2_20160904013434_v5.87.0.cdf 
+    Parameters:
+        path: the path to the folder that contains the file
+        datetimeRange: a list of two datetime object, start and end, that specifies the temporal interval of the data.
+    '''
+    pass
+
 
 def findFileNamesInInterval(path, interval=None, timeFMT='%Y%m%d', strings=None, size='allSize', findAll=False):
     '''

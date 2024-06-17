@@ -7,17 +7,17 @@ import socket
 
 if sys.platform == 'linux':
     if socket.gethostname() == 'yufei-OptiPlex-5040-2':
-        downloadDataDir = '/home/yufei/Documents/database/data' #This is where you want to store the downloaded files
+        downloadDatabaseDir = '/home/yufei/Documents/database' #This is where you want to store the downloaded files
     else:
-        downloadDataDir = '/media/yufei/Elements/data' #This is where you want to store the downloaded files
+        downloadDatabaseDir = '/media/yufei/Elements/database' #This is where you want to store the downloaded files
     databaseDirs = ['/home/yufei/Documents/remoteDatabase'] #This is a list that contain all database. The files that exist in these databases will be omitted in downloading.
 elif sys.platform == 'win32':
-    downloadDataDir = '..\\data'
-    databaseDirs = ['\\\\10.249.183.237\\data']
+    downloadDatabaseDir = '..\\database'
+    databaseDirs = ['\\\\10.249.183.237\\pub']
 
 #databaseDirs = []
 
-readInternetForFileNames = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDataDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
+readInternetForFileNames = True # if True, the program reads from ftp the list of the files you would like to present in your downloadDatabaseDir and databaseDirs after it ends. This suit the first run of the program. After a run with this parameter set True, the list of files will be stored locally for later use, such as a second run when the first run is not successful. In this case, this parameter should be set to False and so the program will read the locally stored list to save the time spent on reading ftp.
 
 #dataNameDict = {'ace': {'mag': {'level_2_cdaweb': 'mfi_h3'}, 'swepam': {'level_2_cdaweb': 'swe_h0'}}}
 
@@ -58,5 +58,5 @@ if readInternetForFileNames:
     fileNamesSource = 'internet'
 else:
     fileNamesSource = 'from_log'
-downloadSPDF.downloadSPDF(downloadDataDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource, protocol=protocol)
+downloadSPDF.downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, logFileDir=logFileDir, fileNamesSource=fileNamesSource, protocol=protocol)
 print('end')

@@ -49,6 +49,8 @@ class Database:
         '''
         self.paths = databasePaths
         self.path = self.paths[0]
+        self.dataPath = os.path.join(self.path, 'data')
+        self.dataPaths = [os.path.join(path, 'data') for path in self.paths]
         self.datasets_info = {}
         self.additional_datasets_info = {}
         self.datasets_info_paths = []
@@ -165,6 +167,10 @@ class Database:
             if 'HRO' in dID:
                 dataset_path = os.path.join('omni', 'omni_cdaweb', dID[5:].lower())
                 dataset.update({'dataset_path': dataset_path})
+        elif dID[:3] == 'PSP':
+            if 'PSP_FLD_L2_MAG_RTN' == dID:
+                dataset_path = os.path.join('psp', 'fields', 'l2', 'mag_rtn')
+                dataset.update({'dataset_path': dataset_path})
         return dataset
 
     def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):
@@ -201,8 +207,8 @@ class Database:
 
     def make_additional_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
         '''
-        Purpose:
-            Create a file storing support information about the datasets in the database
+        additional_datasets_info is the file where I store the information related to datasets such as the path to a dataset.
+        This function create a file storing support information about the datasets in the database.
         Parameters:
             get_info_from_CDAWeb: if False, the function will get datasetID from the file defined by save_name
 
@@ -280,6 +286,11 @@ class Database:
             with open(self.additional_datasets_info_paths[0], 'r') as f:
                 self.additional_datasets_info = json.load(f)
 
+    def _check_exist_file(self, filename):
+        for path in self.paths:
+            if os.path.exists(os.path.join(path, filename)):
+                return True
+        return False
 
 class CDAWebHTMLParser(HTMLParser):
     def __init__(self):
