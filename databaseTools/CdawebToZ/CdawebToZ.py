@@ -16,7 +16,8 @@ if __name__ == '__main__':
         src = os.path.join(srcdata, *src_name_in_list[:-1])
         dst = os.path.splitext(os.path.join(dstdata, *src_name_in_list[:-1]))[0] + '.z.cdf'
 #        if src_name_in_list[0] == 'themis' and 'fgm' in src_name_in_list:
-        if verbose:
-            print('converting ', src)
-        CTZ.CdawebTHEMISFile.convert_from_cdaweb_to_z(src, dst)
+        if 'fgm' in src_name_in_list:
+            if verbose:
+                print('converting ', src)
+            CTZ.CdawebTHEMISFile.convert_from_cdaweb_to_z(src, dst)
 

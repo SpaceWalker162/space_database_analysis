@@ -20,7 +20,6 @@ class CdawebTHEMISFile:
         if (cdf_master.file != None):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             info = cdf_master.cdf_info() # Get the cdf's specification
-            cdf_file = cdflib.cdfwrite.CDF(dst, delete=True)
             globalAttrs = cdf_master.globalattsget() # Get the global attributes
             # For the moment there is a bug in the cdflib.cdfread.CDF.globalattsget(). The following lines tackle this.
             for att, item in globalAttrs.items():
@@ -28,8 +27,10 @@ class CdawebTHEMISFile:
                 for i, it in enumerate(item):
                     dic[i] = it
                 globalAttrs[att] = dic
-            cdf_file.write_globalattrs(globalAttrs)
             zvars = info.zVariables
+            vardata_list = []
+            varattrs_list = []
+            varinfo_list = []
             for x in range (0, len(zvars)):
                 # For the moment there is this bug in varinq(), which returns a VDRInfo object rather than a dictionary to be accepted by write_var(). Therefore we use __dict__
                 varattrs = cdf_master.varattsget(zvars[x])
@@ -41,6 +42,7 @@ class CdawebTHEMISFile:
                 varname = varinfo['Variable']
                 if varinfo['Data_Type'] not in [31, 32, 33]:
                     if varname[-4:] == 'time':
+                        print(varname)
                         varname = varname[:-4] + 'epoch'
                         dim_size = vardata.shape[1:]
                         varinfo = {
@@ -75,6 +77,12 @@ class CdawebTHEMISFile:
                     varinfo['Compress'] = 0
                 else:
                     varinfo['Compress'] = 6
+                varinfo_list.append(varinfo)
+                varattrs_list.append(varattrs)
+                vardata_list.append(vardata)
+            cdf_file = cdflib.cdfwrite.CDF(dst, delete=False)
+            cdf_file.write_globalattrs(globalAttrs)
+            for varinfo, varattrs, vardata  in zip(varinfo_list, varattrs_list, vardata_list):
                 if varinfo['Sparse'].lower() == 'no_sparse':
                     cdf_file.write_var(varinfo, var_attrs=varattrs, var_data=vardata)
                 elif varinfo['Sparse'].lower() == 'prev_sparse':
