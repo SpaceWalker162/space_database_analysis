@@ -6,6 +6,8 @@ import space_database_analysis.databaseTools as dbt
 if __name__ == '__main__':
     # srcdata and dstdata are the paths to the source/destination data directories. For example dstdata might be /mnt/pub/data
     srcdata, dstdata = sys.argv[1:3]
+    srcdata = os.path.expanduser(srcdata)
+    dstdata = os.path.expanduser(dstdata)
 
     srcdataTree = dbt.readFileInfoRecursively(path=srcdata, verbose=False, facts='stats')
     toD = srcdataTree.toList()
