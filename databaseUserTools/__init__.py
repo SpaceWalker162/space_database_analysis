@@ -141,6 +141,79 @@ class Database(dbt.Database):
             contentDictTree = ot.DictTree(datasets)
         contentDictTree.print()
 
+    @staticmethod
+    def _select_prefered_files(filenames):
+        filenames_prefered = []
+        for filename in filenames:
+            # ext should be '.cdf'
+            filename_base, ext = os.path.splitext(filename)
+            if filename_base[-2:] == '.z':
+                filenames_prefered.append(filename)
+            else:
+                if filename_base+'.z.cdf' in filenames:
+                    pass
+                else:
+                    filenames_prefered.append(filename)
+        return filenames_prefered
+
+    @staticmethod
+    def _compare_file_version(filename1, filename2):
+        '''
+        Parameters:
+            filename1: str
+            filename2: str
+        '''
+        if filename1 == filename2:
+            return '='
+        filename1, _ = os.path.splitext(filename1)
+        filename2, _ = os.path.splitext(filename2)
+        filename1, ext1 = os.path.splitext(filename1)
+        filename2, ext2 = os.path.splitext(filename2)
+        if ext1 == ext2:
+            raise Exception('filename mismatch')
+        elif ext1 == '.z':
+            return '>'
+        elif ext2 == '.z':
+            return '<'
+
+    @staticmethod
+    def _classify_files(filenames):
+        filenames = sorted(filenames)
+        classified = []
+        last_filenamebase = ''
+        for ind in range(len(filenames)):
+            filename = filenames[ind]
+            filenamebase_, _ = os.path.splitext(filename)
+            filenamebase_, z_ext = os.path.splitext(filenamebase_)
+            components = filenamebase_.split('_')
+            version = components[-1]
+            filenamebase = '_'.join(components)
+            if filenamebase == last_filenamebase:
+                file_cat.append(filename)
+            else:
+                file_cat = []
+                classified.append(file_cat)
+                file_cat.append(filename)
+        return classified
+
+    @classmethod
+    def _compare_file_names(cls, filenames1, filenames2):
+            filenames1 = sorted(cls._select_prefered_files(filenames1))
+            filenames2 = sorted(cls._select_prefered_files(filenames2))
+            cmp = '='
+            for filename1 in filenames1:
+                if filename1 in filenames2:
+                    filenames2.remove(filename1)
+                else:
+                    pass
+
+                
+            
+
+
+#        filenames = ['themis/tha/tha_2008.cdf', 'themis/tha/tha_2007.cdf', 'themis/tha/tha_2007.z.cdf']
+#        filenames.sort()
+#        filenames
 
 class Spacecraft:
     '''
@@ -481,6 +554,8 @@ class Dataset:
 #            logging.warning("More than one files were found in {}:" + ("\n{}"*numFiles).format(absolutePathToFile, *fileNames))
         return filePaths
 
+
+
     def _get_file_paths_from_multiple_sources(self, datetimeRange, dateTime=None, copy_if_not_exist=True, search_online=False, search_method='regular', **para):
         '''
         Parameters:
@@ -502,7 +577,7 @@ class Dataset:
                 fileBakPaths = self._get_file_paths(datasetAbsoluteBakPath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria)
                 for fileBakPath in fileBakPaths:
                     destFilePath = os.path.join(self.datasetAbsolutePath, os.path.relpath(fileBakPath, datasetAbsoluteBakPath))
-                    if destFilePath in filePaths:
+                    if Database._compare_file_names(filePaths, destFilePath) == '>':
                         pass
                     elif copy_if_not_exist:
                         logging.info('now copying {} to {} ...'.format(fileBakPath, destFilePath))
@@ -734,7 +809,7 @@ def extractFiles(databaseDir, workDataDir, datasets, interval, keepIfExist=True)
         return [start, end]
 
     datasetsKeys = list(datasets.keys())
-    if len(datasetsKeys) == 1 and datasetsKeys[0] == 'Cluster':
+    if len(datasetsKeys) == 1 and datasetsKeys[0].lower() == 'cluster':
         pass
     else:
         raise Exception('This function only works for Cluster at the moment')
@@ -1373,6 +1448,9 @@ def readHoriaonsData(dataFilePath):
 
 
 def update_datasets_info(databasePath, databaseBakPaths):
+    '''
+    once the additional_datasets_info is updated on the server, user should run this function on the user side to get the new additional_datasets_info
+    '''
     database = dbt.Database(databaseBakPaths)
     for path in databaseBakPaths:
         if path in database.additional_datasets_info_paths[0]:
@@ -1381,12 +1459,13 @@ def update_datasets_info(databasePath, databaseBakPaths):
     filePath = database.additional_datasets_info_paths[0]
     relpath = os.path.relpath(filePath, databasePathBak)
     destFilePath = os.path.join(databasePath, relpath)
-    logging.warning('copying {} to {} ...'.format(filePath, destFilePath))
+    logging.debug('updating additional datasets info: rsync {} to {} ...'.format(filePath, destFilePath))
     os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-    cmdArgs = ['cp', filePath, destFilePath]
+    cmdArgs = ['rsync', '--update', filePath, destFilePath]
     process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     process.wait()
-    logging.warning('file copied')
+    logging.info('updated')
+
 
 def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
     database = dbt.Database([databasePath])

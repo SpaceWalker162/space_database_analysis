@@ -14,6 +14,7 @@ from scipy.optimize import fsolve
 from matplotlib.ticker import FuncFormatter
 import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
+import scipy.signal as signal
 import scipy.special
 import logging
 import spacepy.coordinates as sppcoo
@@ -2075,16 +2076,35 @@ def arg_split(data, gap_threshold=1):
     return break_points
 
 
-def data_split(data, gap_threshold=1):
+def data_split(t, data, gap_threshold=1):
     '''
     data: 2d ndarray with data[:, 0] be the time data acoording to which the data will be splited.
     gap_threshold: can be a number, in which case the data is divided into blocks such that the gap between consecutive blocks is larger than gap_threshold. or a string in the form of 'num*', such as '3*', which set the gap_threshold to be three times the minimum gap in the data.
     return:
     '''
-    t = data[..., 0]
     break_points = arg_split(t, gap_threshold=gap_threshold)
+    t_split = []
     data_split = []
     for ind in range(len(break_points)-1):
         s_ = slice(*break_points[ind:ind+2])
+        t_split.append(t[s_])
         data_split.append(data[s_])
-    return data_split
+    return t_split, data_split
+
+
+def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming'):
+    '''
+    A wrapper of the scipy.signal.spectrogram that split the data into chuncks containing evenly spaced data points and perform scipy.signal.spectrogram on these chuncks individually.
+    '''
+    t_, data_ = dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlySpaced', tStepPecentageCriterion=0.2, lowpassCutoff=None, gapThreshold=gap_threshold, minNumberOfPoints=None, returnShiftQ=False, badpointsMask=None)
+    sample_spacing = (t_[1] - t_[0])
+    t_split, data_split_ = data_split(t_, data_, gap_threshold=gap_threshold)
+    t_spectrogram_split = []
+    data_spectrogram_split = []
+    for t_, data_ in zip(t_split, data_split_):
+        if len(t_) >= nperseg:
+            freq_spectrogram, t_spectrogram, sxx = signal.spectrogram(data_, fs=1/sample_spacing, nperseg=nperseg, noverlap=noverlap, axis=0, window=window, detrend='linear')
+            sxx = np.moveaxis(sxx, -1, 0)
+            t_spectrogram_split.append(t_spectrogram+t_[0])
+            data_spectrogram_split.append(sxx)
+    return freq_spectrogram, t_spectrogram_split, data_spectrogram_split

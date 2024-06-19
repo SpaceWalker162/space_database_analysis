@@ -16,6 +16,7 @@ import space_database_analysis.otherTools as ot
 from pathlib import PurePath
 import copy
 import ast
+import re
 #import progressbar
 import functools
 import threading
@@ -159,6 +160,11 @@ class Database:
                 dataset.update({'dataset_file_time_gap': '1 day'})
             if 'EDP_SLOW' in dID:
                 dataset.update({'dataset_file_time_gap': '1 day'})
+        if dID[:2] == 'TH':
+            ma = re.fullmatch('TH[A-G]_', dID[:4])
+            if ma is not None:
+                dataset_path = os.path.join('themis', *dID.split('_')).lower()
+                dataset.update({'dataset_path': dataset_path})
         elif dID[:4] == 'OMNI':
             dataset.update({
                 'dataset_file_time_gap': '1 month',
@@ -246,6 +252,20 @@ class Database:
             with open(add_info_file_path, 'w') as f:
                 json.dump(add_info, f)
 
+    def update_additional_datasets_info(self, add_dic):
+        for datasetID, dataset in add_dic.items():
+            if datasetID in self.additional_datasets_info:
+                self.additional_datasets_info[datasetID].update(dataset)
+            else:
+                self.additional_datasets_info[datasetID] = dataset
+
+
+    def save_additinal_datasets_info(self):
+        if self.additional_datasets_info:
+            for path in self.paths:
+                add_info_file_path = os.path.join(path, self._database_additional_dataset_info_file_name)
+                with open(add_info_file_path, 'w') as f:
+                    json.dump(self.additional_datasets_info, f)
 
     def make_datasets_info(self, get_info_from_CDAWeb=False, dry_run=False):
         '''
