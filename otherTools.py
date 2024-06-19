@@ -307,22 +307,47 @@ def round_number(num, ndigs=0):
     else:
         return round(num)
 
-def bisect_solution(lis, direction_fun):
+def bisect_solution(lis, direction_func):
+    '''
+    find the desired position specified  by the direction_func in the list called lis
+    Parameters:
+        lis: list
+        direction_func: a function of a single parameter. It returns the direction to find the solution starting from the location of the input parameter.
+
+    Examples
+    --------
+    def direction_func(ind, ind_s=9.5):
+        if ind_s < ind:
+            return Precede
+        elif ind_s > ind:
+            return Follow
+        elif ind_s == ind:
+            return Same
+
+    lis = [1, 4, 6, 7]
+    bisect_solution(lis, direction_func)
+    '''
     lis_range = [0, len(lis)]
     ind_to_compare = (lis_range[1] - lis_range[0]) // 2
-    ret = direction_fun(lis[ind_to_compare])
-    if ret == '=':
-        pass
-    elif ret == '>': # solution is on the right
-        pass
-    elif ret == '<': # solution is on the left
-        pass
-    for ind, filename in enumerate(filenames[1:]):
-        files_range = [0, len(sorted_files)]
-        ind_to_compare = (files_range[1] - files_range[0]) // 2
-        filename_to_compare = sorted_files[ind_to_compare]
-        ret = cls._compare_file_version(filename, filename_to_compare)
-        if ret == '>':
-            files_range = 
-            filename
+    ret = direction_func(lis[ind_to_compare])
+    if ret == Same:
+        return ind_to_compare
+    elif ret == Follow: # solution is on the right
+        sublis = lis[ind_to_compare+1:]
+        if len(sublis) == 0:
+            return ind_to_compare+1
+        pos_ = bisect_solution(sublis, direction_func)
+        pos = pos_ + ind_to_compare+1
+    elif ret == Precede: # solution is on the left
+        sublis = lis[:ind_to_compare]
+        if len(sublis) == 0:
+            return ind_to_compare
+        pos = bisect_solution(sublis, direction_func)
+    return pos
 
+class Precede:
+    pass
+class Follow:
+    pass
+class Same:
+    pass

@@ -16,6 +16,7 @@ from cycler import cycler
 from itertools import combinations
 import json
 import cdasws
+import functools
 from urllib.parse import urlparse
 from urllib.request import urlretrieve
 import struct
@@ -92,21 +93,13 @@ missionInfo = {
 
 _epoch_types = ['CDF_EPOCH', 'CDF_EPOCH16', 'CDF_TIME_TT2000']
 
-
+##
 class Database(dbt.Database):
     '''
 
     '''
     def __init__(self, path):
         self.path = path
-
-    def loadInfo(self, fileDictInfoFile=None):
-        if fileDictInfoFile is None:
-            self.fileDict = dbt.readFileInfoRecursively(path=self.path)
-            self.variableDict = aaaaa
-        else:
-            self.fileDict = json.load(fileDictInfoFile)
-            self.variableDict = aaaaa
 
     def printContentTree(self, root=None, year=False, month=False, variables=False, file=sys.stdout):
         def cutBranches(contentDict, until='year'):
@@ -141,6 +134,14 @@ class Database(dbt.Database):
             contentDictTree = ot.DictTree(datasets)
         contentDictTree.print()
 
+
+class FileList(list):
+    '''
+    file list for files in a database
+    '''
+    def __init__(self, filenames):
+        super().__init__(self.classify_files(filenames))
+
     @staticmethod
     def _select_prefered_files(filenames):
         filenames_prefered = []
@@ -164,33 +165,30 @@ class Database(dbt.Database):
             filename2: str
         '''
         if filename1 == filename2:
-            return '='
+            return ot.Same
         filename1, _ = os.path.splitext(filename1)
         filename2, _ = os.path.splitext(filename2)
         filename1, ext1 = os.path.splitext(filename1)
         filename2, ext2 = os.path.splitext(filename2)
         if ext1 == ext2:
             raise Exception('filename mismatch')
-        elif ext1 == '.z':
-            return '>'
-        elif ext2 == '.z':
-            return '<'
+        elif ext1 == '.z': # filename1 precedes filename2
+            return ot.Precede
+        elif ext2 == '.z': # filename2 precedes filename1
+            return ot.Follow
 
     @classmethod
     def _sort_file_by_version(cls, filenames):
         sorted_files = [filenames[0]]
         for ind, filename in enumerate(filenames[1:]):
-            files_range = [0, len(sorted_files)]
-            ind_to_compare = (files_range[1] - files_range[0]) // 2
-            filename_to_compare = sorted_files[ind_to_compare]
-            ret = cls._compare_file_version(filename, filename_to_compare)
-            if ret == '>':
-                files_range = 
-                filename
+            direction_func = functools.partial(cls._compare_file_version, filename)
+            pos = ot.bisect_solution(sorted_files, direction_func)
+            sorted_files.insert(pos, filename)
+        return sorted_files
 
 
-    @staticmethod
-    def _classify_files(filenames):
+    @classmethod
+    def classify_files(cls, filenames):
         filenames = sorted(filenames)
         classified = []
         last_filenamebase = ''
@@ -207,29 +205,52 @@ class Database(dbt.Database):
                 file_cat = []
                 classified.append(file_cat)
                 file_cat.append(filename)
-        for file_class in classified:
-
+            last_filenamebase = filenamebase
+        for ind, file_class in enumerate(classified):
+            classified[ind] = cls._sort_file_by_version(file_class)
         return classified
 
+    def refine_files(self):
+        for ind, file_class in enumerate(self):
+            self[ind] = [file_class[0]]
+
     @classmethod
-    def _compare_file_names(cls, filenames1, filenames2):
-            filenames1 = sorted(cls._select_prefered_files(filenames1))
-            filenames2 = sorted(cls._select_prefered_files(filenames2))
-            cmp = '='
-            for filename1 in filenames1:
-                if filename1 in filenames2:
-                    filenames2.remove(filename1)
-                else:
-                    pass
+    def _compare_file_list(cls, file_list, file_name):
+        if [file_name] in file_list:
+            return ot.Precede
+        for file_class in file_list:
+            cla = cls.classify_files([file_class[0], file_name])
+            if len(cla) == 1:
+                if cla[0][0] == file_name:
+                    return
+                elif cla[0][0] == file_class[0]:
+                    return ot.Precede
 
-                
-            
+    def compare_file(self, file_name, update=False):
+        if [file_name] in self:
+            if update:
+                return
+            else:
+                return ot.Precede
+        for file_class in self:
+            cla = self.classify_files([file_class[0], file_name])
+            if len(cla) == 1:
+                if cla[0][0] == file_name:
+                    if update:
+                        file_class.insert(0, file_name)
+                        return True
+                    else:
+                        return
+                elif cla[0][0] == file_class[0]:
+                    if update:
+                        return
+                    else:
+                        return ot.Precede
+        if update:
+            self.append([file_name])
+            return True
 
-
-#        filenames = ['themis/tha/tha_2008.cdf', 'themis/tha/tha_2007.cdf', 'themis/tha/tha_2007.z.cdf']
-#        filenames.sort()
-#        filenames
-
+##
 class Spacecraft:
     '''
     Properties:
@@ -585,23 +606,27 @@ class Dataset:
             search_func = findFileNamesInTimeRange
             search_criteria = {'timeRange': datetimeRange, 'getTimeFromNameFunc': getTimeFromName}
 
-        filePaths = self._get_file_paths(self.datasetAbsolutePath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria)
+        filePaths = FileList(self._get_file_paths(self.datasetAbsolutePath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria))
+        filePaths.refine_files()
+        filePaths = [file_[0] for file_ in filePaths]
+        file_list = FileList([os.path.relpath(path_, self.datasetAbsolutePath) for path_ in filePaths])
 
         if self.dataBakPaths:
             for datasetAbsoluteBakPath in self.datasetAbsoluteBakPaths:
                 fileBakPaths = self._get_file_paths(datasetAbsoluteBakPath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria)
                 for fileBakPath in fileBakPaths:
-                    destFilePath = os.path.join(self.datasetAbsolutePath, os.path.relpath(fileBakPath, datasetAbsoluteBakPath))
-                    if Database._compare_file_names(filePaths, destFilePath) == '>':
-                        pass
-                    elif copy_if_not_exist:
-                        logging.info('now copying {} to {} ...'.format(fileBakPath, destFilePath))
-                        os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-                        shutil.copy2(fileBakPath, destFilePath)
-                        logging.info('file copied')
-                        filePaths.append(destFilePath)
-                    else:
-                        filePaths.append(fileBakPath)
+                    fileBakPathUnderDataset = os.path.relpath(fileBakPath, datasetAbsoluteBakPath)
+                    destFilePath = os.path.join(self.datasetAbsolutePath, fileBakPathUnderDataset)
+                    not_exist_Q = file_list.compare_file(fileBakPathUnderDataset, update=True)
+                    if not_exist_Q:
+                        if copy_if_not_exist:
+                            logging.info('now copying {} to {} ...'.format(fileBakPath, destFilePath))
+                            os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+                            shutil.copy2(fileBakPath, destFilePath)
+                            logging.info('file copied')
+                            filePaths.append(destFilePath)
+                        else:
+                            filePaths.append(fileBakPath)
 
         if search_online:
             filePaths = self.get_online_files(datetimeRange=datetimeRange, search_criteria=search_criteria)
@@ -1119,7 +1144,7 @@ def readDataFromACdfFile(cdfFile=None, variables=None, datetimeRange=None, cdf_f
             depend0 = varInfoDict[var]['varAtts'].get('DEPEND_0', None)
             logging.debug('depend0: '+ str(depend0))
             if depend0 is None:
-                if varInfoDict[var]['varInfo'].Data_Type_Description in  _epoch_types:
+                if varInfoDict[var]['varInfo'].Data_Type_Description in _epoch_types:
                     epochDataName = var
                 else:
                     majorData = False

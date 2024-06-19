@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import cdflib
 
 
@@ -49,6 +50,7 @@ class CdawebTHEMISFile:
                                 'Rec_Vary': True,
                                 'Dim_Sizes': dim_size,
                                 'Block_Factor': 5462,
+                                'Sparse': 'No_sparse'
                                     }
                         varattrs = {
                                 'CATDESC': varname + ' (CDF_TIME_TT2000)',
@@ -61,10 +63,10 @@ class CdawebTHEMISFile:
                                 }
                         vardata = cdflib.epochs.CDFepoch.timestamp_to_tt2000(vardata)
                     else:
-                        if 'DEPEND_0' in varinfo:
-                            varinfo['DEPEND_0'] = '_'.join(varinfo['DEPEND_TIME'].split('_')[:-1] + ['epoch'])
-                            del varinfo['DEPEND_TIME']
-                            del varinfo['DEPEND_EPOCH0']
+                        if 'DEPEND_0' in varattrs:
+                            varattrs['DEPEND_0'] = '_'.join(varattrs['DEPEND_TIME'].split('_')[:-1] + ['epoch'])
+                            del varattrs['DEPEND_TIME']
+                            del varattrs['DEPEND_EPOCH0']
                 else:
                     assert vardata is None or varname == 'range_epoch' or vardata == 62167219200000.0
                     continue
@@ -73,7 +75,10 @@ class CdawebTHEMISFile:
                     varinfo['Compress'] = 0
                 else:
                     varinfo['Compress'] = 6
-
-                cdf_file.write_var(varinfo, var_attrs=varattrs, var_data=vardata)
+                if varinfo['Sparse'].lower() == 'no_sparse':
+                    cdf_file.write_var(varinfo, var_attrs=varattrs, var_data=vardata)
+                elif varinfo['Sparse'].lower() == 'prev_sparse':
+                    prevrecs = np.insert((np.nonzero(np.diff(vardata, axis=0))[0] + 1), 0, 0)
+                    cdf_file.write_var(varinfo, var_attrs=varattrs, var_data=[prevrecs, vardata])
             cdf_file.close()
 

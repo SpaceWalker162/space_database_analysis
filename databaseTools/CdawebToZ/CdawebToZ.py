@@ -12,5 +12,6 @@ if __name__ == '__main__':
     for src_name_in_list in toD:
         src = os.path.join(srcdata, *src_name_in_list[:-2])
         dst = os.path.splitext(os.path.join(dstdata, src_name_in_list[:-2]))[0] + '.z.cdf'
-        if src_name_in_list[0] == 'themis':
-            CTZ.CdawebTHEMISFile.convert_from_cdaweb_to_z(src, dst)
+#        if src_name_in_list[0] == 'themis' and 'fgm' in src_name_in_list:
+        CTZ.CdawebTHEMISFile.convert_from_cdaweb_to_z(src, dst)
+
