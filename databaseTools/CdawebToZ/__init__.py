@@ -42,7 +42,6 @@ class CdawebTHEMISFile:
                 varname = varinfo['Variable']
                 if varinfo['Data_Type'] not in [31, 32, 33]:
                     if varname[-4:] == 'time':
-                        print(varname)
                         varname = varname[:-4] + 'epoch'
                         dim_size = vardata.shape[1:]
                         varinfo = {
