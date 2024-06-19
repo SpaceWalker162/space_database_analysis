@@ -176,6 +176,19 @@ class Database(dbt.Database):
         elif ext2 == '.z':
             return '<'
 
+    @classmethod
+    def _sort_file_by_version(cls, filenames):
+        sorted_files = [filenames[0]]
+        for ind, filename in enumerate(filenames[1:]):
+            files_range = [0, len(sorted_files)]
+            ind_to_compare = (files_range[1] - files_range[0]) // 2
+            filename_to_compare = sorted_files[ind_to_compare]
+            ret = cls._compare_file_version(filename, filename_to_compare)
+            if ret == '>':
+                files_range = 
+                filename
+
+
     @staticmethod
     def _classify_files(filenames):
         filenames = sorted(filenames)
@@ -194,6 +207,8 @@ class Database(dbt.Database):
                 file_cat = []
                 classified.append(file_cat)
                 file_cat.append(filename)
+        for file_class in classified:
+
         return classified
 
     @classmethod

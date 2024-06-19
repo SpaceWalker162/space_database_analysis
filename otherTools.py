@@ -306,3 +306,23 @@ def round_number(num, ndigs=0):
         return int(np.ceil(num))
     else:
         return round(num)
+
+def bisect_solution(lis, direction_fun):
+    lis_range = [0, len(lis)]
+    ind_to_compare = (lis_range[1] - lis_range[0]) // 2
+    ret = direction_fun(lis[ind_to_compare])
+    if ret == '=':
+        pass
+    elif ret == '>': # solution is on the right
+        pass
+    elif ret == '<': # solution is on the left
+        pass
+    for ind, filename in enumerate(filenames[1:]):
+        files_range = [0, len(sorted_files)]
+        ind_to_compare = (files_range[1] - files_range[0]) // 2
+        filename_to_compare = sorted_files[ind_to_compare]
+        ret = cls._compare_file_version(filename, filename_to_compare)
+        if ret == '>':
+            files_range = 
+            filename
+
