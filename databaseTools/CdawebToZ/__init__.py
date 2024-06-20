@@ -35,24 +35,25 @@ class CdawebTHEMISFile:
                 # For the moment there is this bug in varinq(), which returns a VDRInfo object rather than a dictionary to be accepted by write_var(). Therefore we use __dict__
                 varattrs = cdf_master.varattsget(zvars[x])
                 varinfo = cdf_master.varinq(zvars[x]).__dict__
-                try:
+                if varinfo['Last_Rec'] >= 0:
                     vardata = cdf_master.varget(zvars[x])
-                except:
+                else:
                     vardata = None
                 varname = varinfo['Variable']
                 if varinfo['Data_Type'] not in [31, 32, 33]:
                     if varname[-4:] == 'time':
                         varname = varname[:-4] + 'epoch'
-                        dim_size = vardata.shape[1:]
-                        varinfo = {
-                                'Variable': varname,
-                                'Data_Type': 33,
-                                'Num_Elements': 1,
-                                'Rec_Vary': True,
-                                'Dim_Sizes': dim_size,
-                                'Block_Factor': 5462,
-                                'Sparse': 'No_sparse'
-                                    }
+                        varinfo['Variable'] = varname
+                        varinfo['Data_Type'] = 33
+#                        varinfo = {
+#                                'Variable': varname,
+#                                'Data_Type': 33,
+#                                'Num_Elements': 1,
+#                                'Rec_Vary': True,
+#                                'Dim_Sizes': dim_size,
+#                                'Block_Factor': 5462,
+#                                'Sparse': 'No_sparse'
+#                                    }
                         varattrs = {
                                 'CATDESC': varname + ' (CDF_TIME_TT2000)',
                                 'FIELDNAM': varname,
@@ -62,7 +63,8 @@ class CdawebTHEMISFile:
                                 'VAR_TYPE': 'support_data',
                                 'LABLAXIS': 'UT',
                                 }
-                        vardata = cdflib.epochs.CDFepoch.timestamp_to_tt2000(vardata)
+                        if varinfo['Last_Rec'] >= 0:
+                            vardata = cdflib.epochs.CDFepoch.timestamp_to_tt2000(vardata)
                     else:
                         if 'DEPEND_0' in varattrs:
                             varattrs['DEPEND_0'] = '_'.join(varattrs['DEPEND_TIME'].split('_')[:-1] + ['epoch'])
