@@ -20,9 +20,16 @@ if __name__ == '__main__':
     total_counts = len(toD)
     for ind, src_name_in_list in enumerate(toD):
         src = os.path.join(srcdata, *src_name_in_list[:-1])
-        dst = os.path.splitext(os.path.join(dstdata, *src_name_in_list[:-1]))[0] + '.z.cdf'
-        if src[-6:] == '.z.cdf':
+        ss_, ext = os.path.splitext(src)
+        if ext.lower() == '.cdf':
+            ss_, ext = os.path.splitext(ss_)
+            if ext == '.z':
+                continue
+            else:
+                pass
+        else:
             continue
+        dst = os.path.splitext(os.path.join(dstdata, *src_name_in_list[:-1]))[0] + '.z.cdf'
         if os.path.exists(dst):
             continue
 #        if src_name_in_list[0] == 'themis' and 'fgm' in src_name_in_list:
