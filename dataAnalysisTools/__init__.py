@@ -5,26 +5,17 @@ import cdflib    # see github.com/MAVENSDC/cdflib
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseUserTools as dut
 import functools
-import matplotlib as mpl
 #from datetime import datetime
 import datetime as dt
 from itertools import combinations
 from scipy.signal import butter, lfilter, freqz
 from scipy.optimize import fsolve
-from matplotlib.ticker import FuncFormatter
-import matplotlib.pyplot as plt
 import scipy.interpolate as interpolate
 import scipy.signal as signal
 import scipy.special
 import logging
 import spacepy.coordinates as sppcoo
-import matplotlib.axes._axes
 
-plt.rcParams['font.size'] = 24
-plt.rcParams['font.size'] = 18
-plt.rcParams['xtick.direction'] = 'in'
-plt.rcParams['ytick.direction'] = 'in'
-plt.rcParams['axes.grid'] = 'True'
 
 '''
 <A, B> means either A or B
@@ -101,20 +92,24 @@ class mms:
 
 
     @staticmethod
-    def chargeCalculationWithDataLoaded(spacecrafts):
+    def chargeCalculationWithDataLoaded(spacecrafts, error_estimation=True):
         numberOfSpacecrafts = len(spacecrafts)
         source = 'EDP'
         t_list = []
         data_list = []
         for spacecraft in spacecrafts:
             t_ = spacecraft.data[source]['t']
-            data_ = np.concatenate((spacecraft.data[source]['E'], spacecraft.data[source]['E_err']), axis=-1)
+            if error_estimation:
+                data_ = np.concatenate((spacecraft.data[source]['E'], spacecraft.data[source]['E_err']), axis=-1)
+            else:
+                data_ = spacecraft.data[source]['E']
             mask_ = ~np.isnan(data_).any(axis=-1)
             data_list.append(data_[mask_])
             t_list.append(t_[mask_])
         resamplingT, synchronized_data = data_synchronization(data_list, t_list)
         EAllSpacecrafts = synchronized_data[..., :3]
-        EErrAllSpacecrafts = synchronized_data[..., 3:]
+        if error_estimation:
+            EErrAllSpacecrafts = synchronized_data[..., 3:]
 
         source = 'MEC89Q'
         dataAllSpacecrafts = np.zeros((len(resamplingT), numberOfSpacecrafts, 3))
@@ -131,18 +126,28 @@ class mms:
         timingShape = volumetricAnalysis(xGSEAllSpacecrafts)
         gradE = coeff[:, 1:, :]
         rho = np.trace(gradE, axis1=-1, axis2=-2) * 55.2636 # in unit of e/m^3
-        EErrAverageOverAllSpacecrafts = np.mean(EErrAllSpacecrafts, axis=-2)
-        print('estimating errors...')
-        gradEErr = leastSquarePolynomialApproximationErrorEstimation(x=xGSEAllSpacecraftsInConstellationCenter, d=1, omega=None, dj=EErrAverageOverAllSpacecrafts)
-        print('estimated')
-        rhoErr = np.linalg.norm(np.diagonal(gradEErr[:, 1:], axis1=-2, axis2=-1), axis=-1) * 55.2636 # in unit of e/m^3
         data = {}
         data['rho'] = rho
-        data['rhoErr'] = rhoErr
         data['resamplingT'] = resamplingT
         data['timingShape'] = timingShape[0][:, -1]/timingShape[0][:, 0]
         data['x_gse'] = xGSEConstellationCenter
+        if error_estimation:
+            EErrAverageOverAllSpacecrafts = np.mean(EErrAllSpacecrafts, axis=-2)
+            print('estimating errors...')
+            gradEErr = leastSquarePolynomialApproximationErrorEstimation(x=xGSEAllSpacecraftsInConstellationCenter, d=1, omega=None, dj=EErrAverageOverAllSpacecrafts)
+            print('estimated')
+            rhoErr = np.linalg.norm(np.diagonal(gradEErr[:, 1:], axis1=-2, axis2=-1), axis=-1) * 55.2636 # in unit of e/m^3
+            data['rhoErr'] = rhoErr
         return data
+
+    def plot_PSD_spectrogram_from_partial_numberdensity(self, ax, mms_ind=1, datetimeRange=None):
+        source = 'FPI_DIS-PARTMOMS'
+        t =  self.spacecrafts[mms_ind-1].data[source]['t']
+        if t is not None:
+            energyTable_ = spacecraft.data[source]['E'][0]
+            energy_delta = spacecraft.data[source]['E_delta'][0]
+            energyTable = energyTable_ + energy_delta
+            partial_numberdensity = spacecraft.data[source]['f(E)'] * 10**6 # in m^-3
 
 
 def butter_lowpass(cutoff, fs, order=5):
@@ -621,118 +626,6 @@ def chargedBall2Potential(r, b=1, epsilon=1, a=1):
     innerPotential = const + const * np.log(a/r)
     return (np.sign(r-a)+1)/2*outerPotential + (np.sign(a-r)+1)/2*innerPotential
 
-## plot related
-def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs):
-    '''
-    Time series may contain gap, this function replace the original method plot to better tackle the gaps in plot by not plotting them.
-    Parameters:
-        gap_threshold: two data point with a gap larger than this will not be connected in plot. If this parameter is not given, 5 * minimum gap in time series will be used.
-        time_data: when the first parameter args[0] is not time, this parameter should be provided to break all data into blocks. This parameter can be used in the case of plotting trajectory of spacecraft that is not continuous
-    '''
-    assert len(args) == 2
-    x = args[0]
-    y = args[1]
-    gap_threshold = kwargs.get('gap_threshold')
-    time_data = kwargs.get('time_data')
-    if time_data is None:
-        tdiff = np.diff(x)
-    else:
-        tdiff = np.diff(time_data)
-        _ = kwargs.pop('time_data')
-
-    try:
-        _ = kwargs.pop('gap_threshold')
-    except: pass
-    try:
-        enable = kwargs.pop('enable')
-    except: enable = True
-    if enable:
-        if gap_threshold is None:
-            gap_threshold = 5*np.min(tdiff)
-        break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
-        break_points = np.insert(break_points, 0, 0)
-        break_points = np.append(break_points, len(x))
-        plots_ = []
-        for ind in range(len(break_points)-1):
-            s_ = slice(*break_points[ind:ind+2])
-            x_ = x[s_]
-            y_ = y[s_]
-            plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
-            plots_.append(plot_)
-        return plots_
-    else:
-        return self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
-
-mpl.axes.Axes.plot_time_series = plot_time_series
-
-
-## <<<< plot time format
-'''
-Usage:
-    myFormatter = dat.dayFormatter
-    ax.xaxis.set_major_formatter(myFormatter)
-'''
-def format_month(t, pos=None):
-    return cdflib.cdfepoch.encode(t)[8:13]
-
-def format_monthTT2000(t, pos=None):
-    tStr = cdflib.cdfepoch.encode(int(t))
-    return tStr[8:13] + tStr[14:16]
-
-def format_day(t, pos=None):
-    return cdflib.cdfepoch.encode(t)[11:16]
-
-def format_dayTT2000(t, pos=None):
-    return cdflib.cdfepoch.encode(int(t))[11:16]
-
-def format_UT(t, pos=None):
-    tStr = cdflib.cdfepoch.encode(t)
-    return tStr[11:13] + tStr[14:19]
-
-def format_UTTT2000(t, pos=None):
-    tStr = cdflib.cdfepoch.encode_tt2000(t)
-    return tStr[11:13] + tStr[14:19]
-
-def format_hour(t, pos=None):
-    return cdflib.cdfepoch.encode(t)[14:19]
-
-def format_hourTT2000(t, pos=None):
-    return cdflib.cdfepoch.encode(int(t))[14:19]
-
-def format_min(t, pos=None):
-    return cdflib.cdfepoch.encode(t)[17:21]
-
-def format_minTT2000(t, pos=None):
-    return cdflib.cdfepoch.encode(int(t))[17:21]
-
-def format_hourMinTT2000(t, pos=None):
-    return cdflib.cdfepoch.encode(int(t))[14:21]
-
-def format_doy(t, pos=None):
-    '''day of year'''
-    epochs = Epochs(CDF_EPOCH=t)
-    return epochs.get_data('datetime').strftime('%j')
-
-def format_doyThour(t, pos=None):
-    '''day of year'''
-    epochs = Epochs(CDF_EPOCH=t)
-    return epochs.get_data('datetime').strftime('%jT%H')
-
-monthFormatter = FuncFormatter(format_month)
-monthFormatterTT2000 = FuncFormatter(format_monthTT2000)
-dayFormatter = FuncFormatter(format_day)
-dayFormatterTT2000 = FuncFormatter(format_dayTT2000)
-utFormatter = FuncFormatter(format_UT)
-utFormatterTT2000 = FuncFormatter(format_UTTT2000)
-hourFormatter = FuncFormatter(format_hour)
-hourFormatterTT2000 = FuncFormatter(format_hourTT2000)
-minFormatter = FuncFormatter(format_min)
-minFormatterTT2000 = FuncFormatter(format_minTT2000)
-hourMinFormatterTT2000 = FuncFormatter(format_hourMinTT2000)
-doyFormatter = FuncFormatter(format_doy)
-doyThourFormatter = FuncFormatter(format_doyThour)
-
-## plot time format >>>>
 
 def datetime2epoch(dateTime, epochType='CDF_EPOCH'):
     if epochType == 'CDF_EPOCH':
@@ -914,7 +807,7 @@ def map_multi_dimensional_list(func, l):
         return []
 
 
-def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlySpaced', tStepPecentageCriterion=0.9, lowpassCutoff=None, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, badpointsMask=None):
+def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlySpaced', tStepPecentageCriterion=0.9, lowpassCutoff=None, gapThreshold=None, minNumberOfPoints=2, returnShiftQ=False, badpointsMask=None):
     '''
     Purposes:
         To fill missed data in a time series and filter the time series using low pass filter
@@ -949,6 +842,7 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
     if resamplingT is None:
         if tDistribution == 'evenlySpaced':
             tDiff = np.diff(t)
+            assert np.all(tDiff >= 0)
             if type(gapThreshold) is str and gapThreshold[-1] == '*':
                 gapThreshold = float(gapThreshold[:-1])*np.min(tDiff)
             if gapThreshold:
@@ -1554,219 +1448,6 @@ def makeBlocks(data, breakPoints, axis=0):
     return blocks
 
 
-def plotTimeSeriesOfAngle(ax, t, angle, **para):
-    deltaAngle = np.diff(angle)
-    upArgs, = np.nonzero(deltaAngle < -180)
-    upAngleStart = angle[upArgs]
-    upAngleEnd = angle[upArgs+1] + 360
-    tUpIntersection = (360 - upAngleStart)*(t[upArgs+1] - t[upArgs])/(upAngleEnd - upAngleStart) + t[upArgs]
-    numberOfUpIntersection = len(tUpIntersection)
-    logging.debug('number of up intersection: {}'.format(numberOfUpIntersection))
-    if numberOfUpIntersection > 0:
-        logging.debug('up intersection:')
-        logging.debug(cdflib.cdfepoch.breakdown(tUpIntersection))
-        data = np.stack([angle, t], axis=-1)
-        dataUpBlocks = makeBlocks(data, upArgs+1)
-        for upBlockInd in range(numberOfUpIntersection+1):
-            dataUpBlock = dataUpBlocks[upBlockInd]
-            if upBlockInd < numberOfUpIntersection:
-                dataUpBlock = np.append(dataUpBlock, np.array([360, tUpIntersection[upBlockInd]])[None, :], axis=0)
-            if upBlockInd > 0:
-                dataUpBlock = np.insert(dataUpBlock, 0, np.array([0, tUpIntersection[upBlockInd-1]])[None, :], axis=0)
-            angle = dataUpBlock[:, 0]
-            t = dataUpBlock[:, -1]
-            deltaAngle = np.diff(angle, axis=0)
-            downArgs, = np.nonzero(deltaAngle >= 180)
-            logging.debug("current up intersection:")
-            logging.debug(cdflib.cdfepoch.breakdown(t[0]))
-            tOfInterest = Epoch(dateTime=dt.datetime(2002, 2, 9, 0, 34, 0)).epoch
-            if np.abs(tOfInterest - t[0]) < 5000:
-                logging.debug('current block:')
-                logging.debug(cdflib.cdfepoch.breakdown(dataUpBlock[:, -1]))
-                logging.debug('angle:')
-                logging.debug(dataUpBlock[:, 0])
-                logging.debug('down args:')
-                logging.debug(downArgs)
-            if len(downArgs) > 0:
-                downAngleStart = angle[downArgs]
-                downAngleEnd = angle[downArgs+1] - 360
-                tDownIntersection = -downAngleStart*(t[downArgs+1] - t[downArgs])/(downAngleEnd - downAngleStart) + t[downArgs]
-                dataDownBlocks = makeBlocks(dataUpBlock, downArgs+1)
-                numberOfDownIntersection = len(tDownIntersection)
-                logging.debug('number of down intersection: {}'.format(numberOfDownIntersection))
-                for downBlockInd in range(numberOfDownIntersection+1):
-                    dataDownBlock = dataDownBlocks[downBlockInd]
-                    if downBlockInd < numberOfDownIntersection:
-                        dataDownBlock = np.append(dataDownBlock, np.array([0, tDownIntersection[downBlockInd]])[None, :], axis=0)
-                    if downBlockInd > 0:
-                        dataDownBlock = np.insert(dataDownBlock, 0, np.array([360, tDownIntersection[downBlockInd-1]])[None, :], axis=0)
-                    if np.abs(tOfInterest - t[0]) < 5000:
-                        logging.debug('current down block:')
-                        logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[:, -1]))
-                        logging.debug('angle:')
-                        logging.debug(dataDownBlock[:, 0])
-                    logging.debug("current down intersection:")
-                    logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[0, -1]))
-                    plot_, = ax.plot(dataDownBlock[:, -1], dataDownBlock[:, 0], **para)
-            else:
-                plot_, = ax.plot(dataUpBlock[:, -1], dataUpBlock[:, 0], **para)
-    else:
-        plot_, = ax.plot(t, angle, **para)
-    return plot_
-
-
-
-
-def standardizePhaseSpaceDensity(f, theta, phi, energyTable):
-    '''
-    Purpose:
-    Parameters:
-        f: origional phase space density
-        theta: theta table
-        phi: phi table
-    returns:
-        phaseSpaceDensity: an array of four dimensions [time, energyTable, vthetaTable, vPhiTable]
-        vThetaTable: sorted theta table from 0 to pi
-        vPhiTable: sorted phi table from 0 to 2pi
-        energyTable: sorted energy table
-    '''
-    argEnergy = np.argsort(energyTable, axis=-1)
-    energyTable = energyTable[..., argEnergy]
-    f_ = f[:, :, :, argEnergy]
-    vThetaTable_ = sphericalAngleTransform(np.radians(theta), coordinate='theta', standardOutRange=True, inRange=[-np.pi/2, np.pi/2])
-    vPhiTable_ = sphericalAngleTransform(np.radians(phi), coordinate='phi', standardOutRange=True, inRange=[-np.pi, np.pi])
-    argTheta = np.argsort(vThetaTable_)
-    argPhi = np.argsort(vPhiTable_)
-    vThetaTable = vThetaTable_[argTheta]
-    vPhiTable = vPhiTable_[argPhi]
-    f_ = f_[:, argTheta]
-    f_ = f_[:, :, argPhi]
-    phaseSpaceDensity = np.moveaxis(f_, source=-1, destination=1)
-    return phaseSpaceDensity, vThetaTable, vPhiTable, energyTable
-
-
-def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, datasetName=None, plotTGap=10, integration=None):
-    '''
-    Purpose:
-        The name of this function is self-explanatory
-    Parameters:
-        epochStart:
-        plotTGap: = 10 # in second
-    '''
-#    nPoints = np.prod(f_.shape[1:])
-    f_, vThetaTable, vPhiTable, energyTable = standardizePhaseSpaceDensity(f, theta, phi, energyTable)
-    tIndOfStart = epochStart.epochRecord(t, tolerance=20)
-    tSteps = np.diff(t)
-    uni_, counts = np.unique(tSteps, return_counts=True)
-    tStep = uni_[counts.argmax()]
-    print(uni_)
-    print(counts)
-    tGapN = int(np.ceil(plotTGap*1000/tStep))
-    if integration is None:
-        fig, axes = plt.subplots(nrows=3, ncols=4, layout='constrained', subplot_kw={'projection': 'polar'})
-    else:
-        fig, axes = plt.subplots(nrows=3, ncols=4, layout='constrained')
-    for axr in range(3):
-        for axc in range(4):
-            ax = axes[axr][axc]
-            tInd = (axr*4+axc) * tGapN + tIndOfStart
-            print(tInd)
-            if tInd > len(f_)-1:
-                break
-            phaseSpaceDensity = f_[tInd]
-            datasetEnergyTableDependantOnTime = ['ls_sw']
-            for ind_ in range(len(datasetEnergyTableDependantOnTime)):
-                datasetEnergyTableDependantOnTime.append(datasetEnergyTableDependantOnTime[ind_].upper())
-            if  any([datasetName_ in datasetName for datasetName_ in datasetEnergyTableDependantOnTime]):
-                energyTableDependantOnTime = True
-            else:
-                energyTableDependantOnTime = False
-            if energyTableDependantOnTime:
-                vTable = 13.841 * np.sqrt(energyTable[tInd]) # in km/s
-            else:
-                vTable = 13.841 * np.sqrt(energyTable) # in km/s
-            if integration is None:
-                plotPhaseSpaceDensityCut(ax, phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable)
-            else:
-                plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable, integration=integration)
-            ax.set_title(dt.datetime(*cdflib.cdfepoch.breakdown(t[tInd])[:6]))
-    return fig
-
-
-def interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTable):
-    phaseSpaceDensity = phaseSpaceDensity.flatten()
-    vPointsMeshgridSpherical = np.meshgrid(vTable, vThetaTable, vPhiTable, indexing='ij')
-    vPointsCartesian = spherical2cartesian(np.stack(vPointsMeshgridSpherical, axis=-1).reshape(-1, 3))
-    interp = interpolate.NearestNDInterpolator(vPointsCartesian, phaseSpaceDensity)
-    return interp
-
-
-def integratingPhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTable, integration, integrationStepsN=100):
-    '''
-    Purpose:
-    Parameters:
-        phaseSpaceDensity: a ndarray of shape [time, vTable, vThetaTable, vPhiTable]
-        integration: if None, plot a cut of phase space density. Otherwise, it should be a list of numbers, e.g. [1, 2], in which each number represents the dimension to be integrated out.
-    '''
-    vRange = vTable[-1] * np.array([-1, 1])
-    vInterpGrid = np.linspace(*vRange, integrationStepsN)
-    interpoationGrid = np.meshgrid(vInterpGrid, vInterpGrid, vInterpGrid, indexing='ij')
-    numberOfRecords = phaseSpaceDensity.shape[0]
-#    numberOfIntegrationDim = len(integration)
-#    integratedShape = [integrationStepsN] *(3 - numberOfIntegrationDim)
-    interpolatedData = []
-#    psdIntegrated = np.zeros((numberOfRecords, *integratedShape))
-    for tInd in range(numberOfRecords):
-        print(tInd)
-        phaseSpaceDensity_ = phaseSpaceDensity[tInd]
-        interp = interpolatePhaseSpaceDensity(phaseSpaceDensity_, vTable, vThetaTable, vPhiTable)
-        interpolatedData_ = interp(*interpoationGrid)
-        interpolatedData.append(interpolatedData_)
-    interpolatedData = np.stack(interpolatedData, axis=0)
-    integration = np.sort(np.array(integration))[::-1]
-    phaseSDIntegrated_ = interpolatedData
-    for axis in integration:
-        phaseSDIntegrated_ = phaseSDIntegrated_.sum(axis=axis+1)
-    psdInterpInteg = phaseSDIntegrated_
-    return psdInterpInteg, vInterpGrid
-
-
-def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTable, integration=None, integrationStepsN=100):
-    '''
-    Purpose:
-    Parameters:
-        integration: if None, plot a cut of phase space density. Otherwise, it should be a character, <'x', 'y', 'z'>, which represents a dimension to be integrated out.
-    '''
-    interp = interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTable)
-    vRange = vTable[-1] * np.array([-1, 1])
-    vPlotGrid = np.linspace(*vRange, 100)
-    vGrid = np.meshgrid(vPlotGrid, vPlotGrid, indexing='ij')
-    vzGrid = np.zeros_like(vGrid[0])
-    if integration is None:
-        phaseSDInterp = interp(*vGrid, vzGrid)
-        ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
-    else:
-        if integration == 'z':
-            vGridAllIntegration = [np.repeat(grid[..., None], integrationStepsN, axis=-1) for grid in vGrid]
-            vzGridAllIntegration = vzGrid[..., None] + np.linspace(*vRange, integrationStepsN)
-            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration), axis=-1)
-    ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
-#    xyLim = [-2000, 2000]
-#    xyTicks = np.arange(-2000, 2001, 1000)
-#    ax.set_ylim(xyLim)
-#    ax.set_xlim(xyLim)
-#    ax.set_xticks(xyTicks, labels=[])
-#    ax.set_yticks(xyTicks)
-    ax.grid(True)
-#    ax.axis('equal')
-
-def plotPhaseSpaceDensityCut(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTable):
-    vxyTable = vTable
-    phaseSpaceDensityCut = np.log10(phaseSpaceDensity[:, 3:5].sum(axis=1))
-    vMesh, vPhiMesh = np.meshgrid(vxyTable, vPhiTable, indexing='ij')
-    ax.pcolormesh(vPhiMesh, vMesh, phaseSpaceDensityCut)
-    ax.grid(True)
-
 def interp(x, xp, fp):
     '''
     Purpose: linear interpolation
@@ -1880,18 +1561,6 @@ def ssqBasisInICRFBasis(t, tSaturn, posCartesianSaturn, tSun, posCartesianSun):
     ssqBasisInICRFBasis = np.concatenate([x_axis[..., None, :], y_axis[..., None, :], z_axis[..., None, :]], axis=-2)
     return ssqBasisInICRFBasis
 
-def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
-    labelsF = ['${}_x$', '${}_y$', '${}_z$']
-    colors = ['m', 'g', 'b']
-    if label:
-        labels = [labelF.format(label) for labelF in labelsF]
-    for ind in range(3):
-        ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
-    if norm:
-        ax.plot_time_series(t, np.linalg.norm(data, axis=-1), color='k', label=label, **kwargs)
-    ax.set_ylabel(label)
-    ax.grid(True)
-    return ax
 
 def tetrahedronQuality(pos, method='qGM'):
     '''
@@ -2092,11 +1761,14 @@ def data_split(t, data, gap_threshold=1):
     return t_split, data_split
 
 
-def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming'):
+def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming', verbose=True, minNumberOfPoints=2):
     '''
     A wrapper of the scipy.signal.spectrogram that split the data into chuncks containing evenly spaced data points and perform scipy.signal.spectrogram on these chuncks individually.
     '''
-    t_, data_ = dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlySpaced', tStepPecentageCriterion=0.2, lowpassCutoff=None, gapThreshold=gap_threshold, minNumberOfPoints=None, returnShiftQ=False, badpointsMask=None)
+    if t.size == 0:
+        logging.warning('spectrogram input size 0')
+        return [[]]*3
+    t_, data_ = dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlySpaced', tStepPecentageCriterion=0.2, lowpassCutoff=None, gapThreshold=gap_threshold, minNumberOfPoints=minNumberOfPoints, returnShiftQ=False, badpointsMask=None)
     sample_spacing = (t_[1] - t_[0])
     t_split, data_split_ = data_split(t_, data_, gap_threshold=gap_threshold)
     t_spectrogram_split = []
@@ -2107,4 +1779,7 @@ def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming'
             sxx = np.moveaxis(sxx, -1, 0)
             t_spectrogram_split.append(t_spectrogram+t_[0])
             data_spectrogram_split.append(sxx)
+    if verbose:
+        print('number of split: {}'.format(len(t_spectrogram_split)))
+        print('counts in each split: ', [len(t_) for t_ in t_spectrogram_split])
     return freq_spectrogram, t_spectrogram_split, data_spectrogram_split

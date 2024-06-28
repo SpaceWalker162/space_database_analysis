@@ -291,7 +291,7 @@ class Spacecraft:
         self.workDataDir = workDataDir
         self.workDataDirsBak = workDataDirsBak
 
-    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, datasets_variables_with_retrieving_names=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, search_online=False, fromFile=None, useMask=False, maskValue=-1.0*10**30, sparse_factor=None):
+    def loadData(self, datetimeRange=None, instrumentation=None, instrumentationRetrivingName=None, datasets_variables_with_retrieving_names=None, variables=None, variableRetrivingNames=None, datasetAndVariables=None, variablesWithRetrivingNames=None, instrumentationVariablesWithRetrivingName=None, cleanData=False, tStepPecentageCriterion=0.9, lowpassCutoff=None, inPlace=False, gapThreshold=None, minNumberOfPoints=None, returnShiftQ=False, copy_if_not_exist=True, search_online=False, fromFile=None, useMask=False, maskValue=-1.0*10**30, sparse_factor=None, allow_nonidentital_supporting_data=False):
         '''
         Parameters:
             datetimeRange: a list of two datetime objects, representing the start and end of the data to be loaded.
@@ -332,7 +332,7 @@ class Spacecraft:
                     dataset = Dataset(dataset_info=dataset_info, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
                 else:
                     dataset = Dataset(datasetID=datasetID, databasePath=self.workDataDir, databaseBakPaths=self.workDataDirsBak)
-                dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, sparse_factor=sparse_factor)
+                dataset.load_data(variableNames=variableNames, datetimeRange=datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, sparse_factor=sparse_factor, allow_nonidentital_supporting_data=allow_nonidentital_supporting_data)
                 if self.epoch_type_to_load_data:
                     for varName in variableNames:
                         data_type = dataset.varInfoDict[varName]['varInfo'].Data_Type_Description
@@ -450,17 +450,19 @@ class Dataset:
 
         dataset_file_time_gap_str = self.dataset_info.get('dataset_file_time_gap')
         if dataset_file_time_gap_str:
+            if dataset_file_time_gap_str == 'irregular':
+                dataset_file_time_gap = 'irregular'
 #            logging.info(dataset_file_time_gap_str)
-            num, unit = dataset_file_time_gap_str.split(' ')
-            num = int(num)
-            if unit == 'hour':
-                unit = timedelta(seconds=3600)
-            elif unit == 'day':
-                unit = timedelta(days=1)
-            elif unit == 'month':
-                unit = ['month']
-            dataset_file_time_gap = num * unit
-
+            else:
+                num, unit = dataset_file_time_gap_str.split(' ')
+                num = int(num)
+                if unit == 'hour':
+                    unit = timedelta(seconds=3600)
+                elif unit == 'day':
+                    unit = timedelta(days=1)
+                elif unit == 'month':
+                    unit = ['month']
+                dataset_file_time_gap = num * unit
         else:
             dataset_file_time_gap = timedelta(days=1)
         self.dataset_file_time_gap = dataset_file_time_gap
@@ -485,7 +487,10 @@ class Dataset:
         elif isinstance(self.dataset_file_time_gap, list):
             assert self.dataset_file_time_gap[0] == 'month'
             beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, 1)
-            endOfTheFilePeriod = datetime(dateTime.year, dateTime.month+len(self.dataset_file_time_gap), 1)
+            if dateTime.month == 12:
+                endOfTheFilePeriod = datetime(dateTime.year+1, dateTime.month+len(self.dataset_file_time_gap)-12, 1)
+            else:
+                endOfTheFilePeriod = datetime(dateTime.year, dateTime.month+len(self.dataset_file_time_gap), 1)
         return beginOfTheFilePeriod, endOfTheFilePeriod
 
     def _define_search_criteria(self, beginOfTheFilePeriod=None, endOfTheFilePeriod=None, dateTime=None, size='allSize', **para):
@@ -604,7 +609,9 @@ class Dataset:
             logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
         elif search_method == 'irregular':
             search_func = findFileNamesInTimeRange
-            search_criteria = {'timeRange': datetimeRange, 'getTimeFromNameFunc': getTimeFromName}
+            timedeltas = [-timedelta(seconds=3600*6), timedelta(seconds=3600*6)]
+            search_criteria = {'timeRange': [datetime_+timedelta_ for datetime_, timedelta_ in zip(datetimeRange, timedeltas)], 'getTimeFromNameFunc': getTimeFromName, 'strings': [self.datasetID.lower()]}
+            logging.info('looking for file with string criteria: {} in datetime range {}/{}'.format(search_criteria['strings'], *search_criteria['timeRange']))
 
         filePaths = FileList(self._get_file_paths(self.datasetAbsolutePath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria))
         filePaths.refine_files()
@@ -679,11 +686,11 @@ class Dataset:
             pass
 
 
-    def _load_data_from_files(self, filePaths, variableNames, datetimeRange=None, sparse_factor=None):
+    def _load_data_from_files(self, filePaths, variableNames, datetimeRanges=None, sparse_factor=None):
         variablesInADatasetOverDatetimeRange = [] # first index for data from different files over a epoch range, second index for variables
         variablesInADatasetIndependantOnTime = []
         varInfoDict = {}
-        for filePath in filePaths:
+        for filePath, datetimeRange in zip(filePaths, datetimeRanges):
             if not filePath:
                 logging.debug('data file not found')
             else:
@@ -699,7 +706,7 @@ class Dataset:
                 variablesInADatasetIndependantOnTime.append(dataAux)
         return variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict
 
-    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False, sparse_factor=None):
+    def load_data(self, variableNames=None, datetimeRange=None, copy_if_not_exist=True, search_online=False, sparse_factor=None, allow_nonidentital_supporting_data=False):
         '''
         Parameter:
             sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
@@ -710,35 +717,58 @@ class Dataset:
         self.variables_to_load = variableNames
         start, end = self.datetimeRange
 
-        if 'brst' in self.datasetID.lower():
+        if isinstance(self.dataset_file_time_gap, str) and self.dataset_file_time_gap == 'irregular':
             filePaths = self._get_file_paths_from_multiple_sources(datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, search_method='irregular')
+            datetimeRanges = [datetimeRange]*len(filePaths)
         else:
             start_ = start
             filePaths = []
+            datetimeRanges = []
             while start_ < end:
                 beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(start_)
+                logging.debug('begin/end of the file period: {}/{}'.format(beginOfTheFilePeriod, endOfTheFilePeriod))
                 if endOfTheFilePeriod >= end:
-                    datetimeRange = [start_, end]
+                    datetimeRange_ = [start_, end]
                 else:
-                    datetimeRange = [start_, endOfTheFilePeriod]
-                filePaths_ = self._get_file_paths_from_multiple_sources(datetimeRange=(beginOfTheFilePeriod, endOfTheFilePeriod), dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                    datetimeRange_ = [start_, endOfTheFilePeriod]
+                filePaths_ = self._get_file_paths_from_multiple_sources(datetimeRange=datetimeRange_, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
                 if filePaths_:
                     filePaths.append(filePaths_[0])
+                    datetimeRanges.append(datetimeRange_)
                 start_ = endOfTheFilePeriod
         if not filePaths:
             logging.debug('data file not found')
         else:
-            variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict = self._load_data_from_files(filePaths, variableNames, datetimeRange=datetimeRange, sparse_factor=sparse_factor)
+            variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict = self._load_data_from_files(filePaths, variableNames, datetimeRanges=datetimeRanges, sparse_factor=sparse_factor)
             variables = {}
             if len(variablesInADatasetOverDatetimeRange) > 0:
                 for var in variablesInADatasetOverDatetimeRange[0].keys():
-                    variables[var] = np.concatenate([varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0], axis=0)
+                    vardata_to_concatenate = [varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0]
+                    if len(vardata_to_concatenate) > 0:
+                        variables[var] = np.concatenate(vardata_to_concatenate, axis=0)
+                    else:
+                        variables[var] = np.array([])
+                        logging.warning('no data found for {}'.format(var))
             else:
                 logging.warning('no data over time found for this load of dataset')
+            # Checking no temporal overlap
+#            for var in variables.keys():
+#                if varInfoDict[var]['varInfo'].Data_Type in [31, 32, 33]:
+#                    # this variable is epoch
+#                    t_diff = np.diff(variables[var])
+            # Checking supporting data in all files are the same
             for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
                 logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
                 for key in variablesInADatasetIndependantOnTime[fileInd].keys():
-                    assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+                    try:
+                        assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+                    except AssertionError as e:
+                        logging.warning('Supporting data for {} not same in {} and {}'.format(key, *filePaths[fileInd:fileInd+2]))
+                        if allow_nonidentital_supporting_data:
+                            pass
+                        else:
+                            raise AssertionError
+
             variables.update(variablesInADatasetIndependantOnTime[0])
             self.data = variables
             self.varInfoDict = varInfoDict
@@ -748,8 +778,7 @@ class Dataset:
 
     def get_data(var, datetimeRange=None):
         '''
-        get data of a variable in a time interval
-
+        It might need to load data into the dataset multiple times. Each time the loaded data could be different. Therefore we need the capability to load data into the existing dataset. This function will return data of a variable in a time interval and will load data if that data is not in memory.
         Parameters:
             var: the name of the variable
             datetimeRange: if None, the data stored in the memory will be returned. Otherwise it should be a list of two datetime objects. If additional data need to be loaded into the memory to fulfill the datetime range, the function will do so and return.

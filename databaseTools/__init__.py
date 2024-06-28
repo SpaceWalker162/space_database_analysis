@@ -151,6 +151,8 @@ class Database:
         if dID[:3] == 'MMS':
             dataset_path = os.path.join('mms', *dID.split('_')).lower()
             dataset.update({'dataset_path': dataset_path})
+            if 'BRST' in dID:
+                dataset.update({'dataset_file_time_gap': 'irregular'})
             if 'FPI_FAST' in dID:
                 dataset.update({
                     'dataset_file_time_gap': '2 hour',
@@ -160,6 +162,8 @@ class Database:
                 dataset.update({'dataset_file_time_gap': '1 day'})
             if 'EDP_SLOW' in dID:
                 dataset.update({'dataset_file_time_gap': '1 day'})
+            if 'HPCA_SRVY' in dID:
+                dataset.update({'dataset_file_time_gap': 'irregular'})
         if dID[:2] == 'TH':
             ma = re.fullmatch('TH[A-G]_', dID[:4])
             if ma is not None:
@@ -168,7 +172,7 @@ class Database:
         elif dID[:4] == 'OMNI':
             dataset.update({
                 'dataset_file_time_gap': '1 month',
-                'file_naming_convention': '{datasetIDLower}_%Y%m%d',
+                'file_naming_convention': '{datasetIDLower}_%Y%m',
                 })
             if 'HRO' in dID:
                 dataset_path = os.path.join('omni', 'omni_cdaweb', dID[5:].lower())

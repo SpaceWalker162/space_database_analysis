@@ -261,6 +261,9 @@ def datetime2list(dateTime, epochType='CDF_EPOCH'):
 
 
 def decimal2binaryArray(array, order='>'):
+    '''
+    Transform decimal array into binary array. 10 -> 1010
+    '''
     binary = []
     while np.any(array > 0):
         array, rem = np.divmod(array, 2)
