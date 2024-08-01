@@ -354,7 +354,7 @@ def integratingPhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTab
     psdInterpInteg = phaseSDIntegrated_
     return psdInterpInteg, vInterpGrid
 
-def plot_time_series_spectrogram(fig, axes, epochs, data, nperseg, noverlap, gap_threshold='6*', epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02,):
+def plot_time_series_spectrogram(fig, axes, epochs, data, nperseg, noverlap, gap_threshold='6*', epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02):
     '''
 
     '''
@@ -401,27 +401,28 @@ def plot_time_series_spectrogram(fig, axes, epochs, data, nperseg, noverlap, gap
     #        cax.set_yticks(10**np.array([6, 7, 8, 9]))
             #cax.set_ylabel('DEF')
 
-def plot_PSD_spectrogram_from_partial_numberdensity(ax, epochs, energy_table, partial_numberdensity, epoch_fmt='CDF_TIME_TT2000'):
+def plot_PSD_spectrogram_from_partial_numberdensity(fig, ax, epochs, energy_table, energy_delta, partial_numberdensity, epoch_fmt='CDF_TIME_TT2000', cax_width=0.02):
     '''
     this function work for mms fpi part-moments, partial-numberdensity
 
     '''
-        numberdensity_over_energy = np.zeros_like(partial_numberdensity)
-        numberdensity_over_energy[:, :-1] = -(np.diff(partial_numberdensity, axis=-1))
-        numberdensity_over_energy[:, -1] = partial_numberdensity[:, -1]
-        f_xv = numberdensity_over_energy/(2*energy_delta*dat.eV)/(2*energyTable*dat.eV/dat.mass_proton)**(1/2) * dat.mass_proton/2 *10**18 # in s^3 km^-3
-        data = f_xv
-        tMesh, energyMesh = np.meshgrid(t, energyTable, indexing='ij')
-        fUni = np.unique(data)
-        vmin = fUni[fUni>0][0]
-        pcm_ = ax.pcolormesh(tMesh, energyMesh, data, norm=pt.mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto', cmap='jet')
-        ax.set_yscale('log')
-        y_major = pt.mpl.ticker.LogLocator(base = 10.0, numticks = 6)
-        ax.yaxis.set_major_locator(y_major)
-        y_minor = pt.mpl.ticker.LogLocator(base = 10.0, subs = np.arange(1.0, 10.0) * 0.1, numticks = 10)
-        ax.yaxis.set_minor_locator(y_minor)
-        ax_pos = ax.get_position()
-        cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
-        cax = fig.add_axes(cax_pos)
-        cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=pt.mpl.ticker.LogLocator(base=10.0, numticks=3))
+    cax_gap = cax_width / 3
+    numberdensity_over_energy = np.zeros_like(partial_numberdensity)
+    numberdensity_over_energy[:, :-1] = -(np.diff(partial_numberdensity, axis=-1))
+    numberdensity_over_energy[:, -1] = partial_numberdensity[:, -1]
+    f_xv = numberdensity_over_energy/(2*energy_delta*dat.eV)/(2*energy_table*dat.eV/dat.mass_proton)**(1/2) * dat.mass_proton/2 *10**18 # in s^3 km^-3
+    data = f_xv
+    tMesh, energyMesh = np.meshgrid(epochs.get_data(epoch_fmt), energy_table, indexing='ij')
+    fUni = np.unique(data)
+    vmin = fUni[fUni>0][0]
+    pcm_ = ax.pcolormesh(tMesh, energyMesh, data, norm=mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto', cmap='jet')
+    ax.set_yscale('log')
+    y_major = mpl.ticker.LogLocator(base = 10.0, numticks = 6)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base = 10.0, subs = np.arange(1.0, 10.0) * 0.1, numticks = 10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax_pos = ax.get_position()
+    cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
+    cax = fig.add_axes(cax_pos)
+    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     ax.set_ylabel('energy [eV]')
