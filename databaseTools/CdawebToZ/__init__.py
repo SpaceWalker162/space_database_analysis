@@ -16,7 +16,10 @@ class CdawebTHEMISFile:
             src: str. Source file path.
             dst: str. Destination file path.
         '''
-        cdf_master = cdflib.CDF(src)
+        try:
+            cdf_master = cdflib.CDF(src)
+        except:
+            return
         if (cdf_master.file != None):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             info = cdf_master.cdf_info() # Get the cdf's specification
