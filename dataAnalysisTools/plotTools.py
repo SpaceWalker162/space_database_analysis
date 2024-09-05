@@ -75,6 +75,33 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     ax.grid(True)
     return ax
 
+
+def plotSphericalCoordinatesOfVectorTimeSeries(ax, t , data):
+    '''
+    Parameters:
+        t: time
+        data: time series of vector data in Cartesian coordinates, such as magnetic field vector array of shape [numberOfEpochs, 3]
+    '''
+    B = data
+    BSpherical = dat.cartesian2spherical(B)/np.pi*180
+    plotTheta, = ax.plot(t, BSpherical[:, 1], color='k', ls='-')
+    ax.set_ylabel('$\\theta$')
+    ax.set_ylim([0, 180])
+    ax.set_yticks([0, 90, 180])
+
+    axTwin = ax.twinx()
+    #dat = reload(dat)
+    plotPhi = plotTimeSeriesOfAngle(axTwin, t, BSpherical[:, 2], color='b', ls='-', label='$\\phi$')
+    #plotPhi, = axTwin.plot(t, vSpherical[:, 2], color='b', ls='-', label='$\\phi$')
+    axTwin.spines["right"].set_color("b")
+    axTwin.set_ylabel('$\\phi$')
+    axTwin.set_ylim([0, 360])
+    axTwin.set_yticks([0, 90, 180, 270, 360])
+    axTwin.tick_params(which='both', direction='in')
+    axTwin.yaxis.label.set_color(plotPhi.get_color())
+    axTwin.tick_params(axis='y', colors=plotPhi.get_color())
+    axTwin.grid(True)
+
 ## <<<< plot time format
 '''
 Usage:
@@ -235,7 +262,7 @@ def standardizePhaseSpaceDensity(f, theta, phi, energyTable):
 def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, datasetName=None, plotTGap=10, integration=None):
     '''
     Purpose:
-        The name of this function is self-explanatory
+        plot phase space density observation at multiple times.
     Parameters:
         epochStart:
         plotTGap: = 10 # in second

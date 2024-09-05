@@ -605,7 +605,8 @@ class Dataset:
         '''
         if search_method == 'regular':
             search_func = findFileNames
-            search_criteria = self._define_search_criteria(*datetimeRange, dateTime=None, size='allSize', **para)
+            beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(datetimeRange[0])
+            search_criteria = self._define_search_criteria(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, size='allSize', **para)
             logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
         elif search_method == 'irregular':
             search_func = findFileNamesInTimeRange
