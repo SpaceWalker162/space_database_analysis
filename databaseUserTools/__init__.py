@@ -630,7 +630,11 @@ class Dataset:
                         if copy_if_not_exist:
                             logging.info('now copying {} to {} ...'.format(fileBakPath, destFilePath))
                             os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-                            shutil.copy2(fileBakPath, destFilePath)
+                            shutil.copyfile(fileBakPath, destFilePath)
+                            try:
+                                shutil.copystat(fileBakPath, destFilePath)
+                            except: pass
+#                            shutil.copy2(fileBakPath, destFilePath)
                             logging.info('file copied')
                             filePaths.append(destFilePath)
                         else:
@@ -945,7 +949,11 @@ def readCDFInfo(cdfFile):
     Parameters:
         cdfFile: a cdf file object defined by cdflib
     '''
-    info = cdfFile.cdf_info()
+    try:
+        info = cdfFile.cdf_info()
+    except Exception as e:
+        logging.warning("failed when reading info from CDF file {filename}".format(filename=cdfFile.file))
+        raise e
     variables = info.zVariables
     if len(variables) == 0:
         variables = info.rVariables

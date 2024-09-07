@@ -1783,3 +1783,9 @@ def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming'
         print('number of split: {}'.format(len(t_spectrogram_split)))
         print('counts in each split: ', [len(t_) for t_ in t_spectrogram_split])
     return freq_spectrogram, t_spectrogram_split, data_spectrogram_split
+
+
+def CalculateDynamicPressure(n, v, spacecraft='mms'):
+    speed = np.linalg.norm(v, axis=-1)
+    dynamicPressure = 1.67 * 10**(-6) * n * speed**2 # nPa
+    return dynamicPressure

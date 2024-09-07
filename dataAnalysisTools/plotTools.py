@@ -424,7 +424,8 @@ def plot_time_series_spectrogram(fig, axes, epochs, data, nperseg, noverlap, gap
             ax_pos = ax.get_position()
             cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
             cax = fig.add_axes(cax_pos)
-            cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'$\log_{10}$(nT$^2$/Hz)', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+            cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'$\log_{10}$(nT$^2$/Hz)', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+#            cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'$\log_{10}$(nT$^2$/Hz)', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     #        cax.set_yticks(10**np.array([6, 7, 8, 9]))
             #cax.set_ylabel('DEF')
 
@@ -451,5 +452,29 @@ def plot_PSD_spectrogram_from_partial_numberdensity(fig, ax, epochs, energy_tabl
     ax_pos = ax.get_position()
     cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
     cax = fig.add_axes(cax_pos)
-    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+#    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+    ax.set_ylabel('E [eV]')
+
+def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', cax_width=0.02):
+    '''
+    this function work for mms fpi moms, mms1_dis_energyspectr_omni_fast
+
+    '''
+    cax_gap = cax_width / 3
+    data = omnidirectional_differential_energy_flux
+    tMesh, energyMesh = np.meshgrid(epochs.get_data(epoch_fmt), energy_table, indexing='ij')
+    fUni = np.unique(data)
+    vmin = fUni[fUni>0][0]
+    pcm_ = ax.pcolormesh(tMesh, energyMesh, data, norm=mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto', cmap='jet')
+    ax.set_yscale('log')
+    y_major = mpl.ticker.LogLocator(base = 10.0, numticks = 6)
+    ax.yaxis.set_major_locator(y_major)
+    y_minor = mpl.ticker.LogLocator(base = 10.0, subs = np.arange(1.0, 10.0) * 0.1, numticks = 10)
+    ax.yaxis.set_minor_locator(y_minor)
+    ax_pos = ax.get_position()
+    cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
+    cax = fig.add_axes(cax_pos)
+#    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'DEF [$\mathrm{keV}/(\mathrm{cm}^2\cdot\mathrm{s}\cdot\mathrm{sr}\cdot\mathrm{keV})$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'DEF', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     ax.set_ylabel('energy [eV]')
