@@ -675,8 +675,7 @@ class FileDownloader(threading.Thread):
                         url_ = urljoin('https://' + self.host, srcName)
                         logging.info('downloading {} from {}'.format(dstName, url_))
                         http = urllib3.PoolManager()
-                        resp = http.request("GET", url_, preload_content=False)
-
+                        resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
                         for chunk in resp.stream(self.blocksize):
                             self.callback(chunk)
                         resp.release_conn()
@@ -744,7 +743,7 @@ class FileDownloadMonitor(threading.Thread):
         if psChange < self.alarmingSize/8:
             self.slowSpeedN += 1
         if self.slowSpeedN > self.allowSlowSpeedN:
-            logging.info('Error: download speed slower than {}kB/s'.format(self.alarmingSpeed/8/1024))
+            logging.info('Monitor report: Error: download speed slower than {}kB/s'.format(self.alarmingSpeed/8/1024))
             self.badWorker.set()
 
     def watch(self):
