@@ -673,9 +673,9 @@ class FileDownloader(threading.Thread):
                         self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
                     elif self.protocol == 'http':
                         url_ = urljoin('https://' + self.host, srcName)
-                        logging.info('downloading {} from {}'.format(dstName, url_))
                         http = urllib3.PoolManager()
                         resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
+                        logging.info('downloading {} from {}'.format(dstName, url_))
                         for chunk in resp.stream(self.blocksize):
                             self.callback(chunk)
                         resp.release_conn()
