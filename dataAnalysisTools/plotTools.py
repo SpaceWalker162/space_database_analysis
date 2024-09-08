@@ -70,7 +70,7 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     for ind in range(3):
         ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
     if norm:
-        ax.plot_time_series(t, np.linalg.norm(data, axis=-1), color='k', label=label, **kwargs)
+        ax.plot_time_series(t, np.linalg.norm(data[..., :3], axis=-1), color='k', label=label, **kwargs)
     ax.set_ylabel(label)
     ax.grid(True)
     return ax
@@ -231,32 +231,38 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
     return plot_
 
 
-def standardizePhaseSpaceDensity(f, theta, phi, energyTable):
+def standardizePhaseSpaceDensity(f, energyTable, thetaTable, phiTable, order=[0, 3, 2, 1], mission='Cluster'):
     '''
     Purpose:
     Parameters:
-        f: origional phase space density
-        theta: theta table
-        phi: phi table
+        f: f is the origional phase space density with f[axis0, axis1, axis2, axis3] such that np.transpose(f, order) gives f[t, energyTable, thetaTable, phiTable]. MMS FPI dis-dist is [t, phiTable, thetaTable, energyTable], in which case order should be [0, 3, 2, 1]. Cluster HIA order should be [0, 3, 1, 2]
+        thetaTable: theta table in degrees
+        phiTable: phi table in degrees
+        order: see f above.
     returns:
-        phaseSpaceDensity: an array of four dimensions [time, energyTable, vthetaTable, vPhiTable]
-        vThetaTable: sorted theta table from 0 to pi
-        vPhiTable: sorted phi table from 0 to 2pi
+        phaseSpaceDensity: an array of four dimensions [time, energyTable, vthetaTableTable, vPhiTable]
+        vThetaTable: sorted thetaTable table from 0 to pi
+        vPhiTable: sorted phiTable table from 0 to 2pi
         energyTable: sorted energy table
     '''
-    argEnergy = np.argsort(energyTable, axis=-1)
-    energyTable = energyTable[..., argEnergy]
-    f_ = f[:, :, :, argEnergy]
-    vThetaTable_ = dat.sphericalAngleTransform(np.radians(theta), coordinate='theta', standardOutRange=True, inRange=[-np.pi/2, np.pi/2])
-    vPhiTable_ = dat.sphericalAngleTransform(np.radians(phi), coordinate='phi', standardOutRange=True, inRange=[-np.pi, np.pi])
-    argTheta = np.argsort(vThetaTable_)
-    argPhi = np.argsort(vPhiTable_)
-    vThetaTable = vThetaTable_[argTheta]
-    vPhiTable = vPhiTable_[argPhi]
-    f_ = f_[:, argTheta]
-    f_ = f_[:, :, argPhi]
-    phaseSpaceDensity = np.moveaxis(f_, source=-1, destination=1)
-    return phaseSpaceDensity, vThetaTable, vPhiTable, energyTable
+    if mission == 'cluster':
+        order = [0, 3, 1, 2]
+        f = np.transpose(f, order)
+        argEnergy = np.argsort(energyTable, axis=-1)
+        energyTable = energyTable[..., argEnergy]
+        f_ = f[:, argEnergy]
+        vThetaTable_ = dat.sphericalAngleTransform(np.radians(thetaTable), coordinate='thetaTable', standardOutRange=True, inRange=[-np.pi/2, np.pi/2])
+        vPhiTable_ = dat.sphericalAngleTransform(np.radians(phiTable), coordinate='phiTable', standardOutRange=True, inRange=[-np.pi, np.pi])
+        argTheta = np.argsort(vThetaTable_)
+        argPhi = np.argsort(vPhiTable_)
+        vThetaTable = vThetaTable_[argTheta]
+        vPhiTable = vPhiTable_[argPhi]
+        f_ = f_[:, :, argTheta]
+        f_ = f_[:, :, :, argPhi]
+        phaseSpaceDensity = f_
+        return phaseSpaceDensity, energyTable, vThetaTable, vPhiTable
+    else:
+        raise Exception('not supported')
 
 
 def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, datasetName=None, plotTGap=10, integration=None):
@@ -307,15 +313,21 @@ def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, dat
     return fig
 
 
-def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTable, integration=None, integrationStepsN=100):
+def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None, vPhiTable=None, phasePointsSpherical=None, integration=None, integrationStepsN=200, vPlotRange=None, vmin=None, vmax=None, fig=None, cax_width=0.02, gridPointsNumber=200):
     '''
     Purpose:
     Parameters:
         integration: if None, plot a cut of phase space density. Otherwise, it should be a character, <'x', 'y', 'z'>, which represents a dimension to be integrated out.
     '''
-    interp = interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTable)
-    vRange = vTable[-1] * np.array([-1, 1])
-    vPlotGrid = np.linspace(*vRange, 100)
+    interp = interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable, phasePointsSpherical=phasePointsSpherical)
+    if vTable is not None:
+        maxv = vTable[-1]
+    elif phasePointsSpherical is not None:
+        maxv = np.max(phasePointsSpherical[:, 0])
+    vRange = maxv * np.array([-1, 1])
+    if vPlotRange is None:
+        vPlotRange = vRange
+    vPlotGrid = np.linspace(*vPlotRange, 100)
     vGrid = np.meshgrid(vPlotGrid, vPlotGrid, indexing='ij')
     vzGrid = np.zeros_like(vGrid[0])
     if integration is None:
@@ -325,8 +337,24 @@ def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTabl
         if integration == 'z':
             vGridAllIntegration = [np.repeat(grid[..., None], integrationStepsN, axis=-1) for grid in vGrid]
             vzGridAllIntegration = vzGrid[..., None] + np.linspace(*vRange, integrationStepsN)
-            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration), axis=-1)
-    ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
+            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration) * np.diff(vRange)/integrationStepsN, axis=-1)
+#    pcm_ = ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
+    data = phaseSDInterp
+    fUni = np.unique(data)
+    if vmin is None:
+        vmin = fUni[fUni>0][0]
+    if vmax is None:
+        vmax = data.max()
+#    pcm_ = ax.pcolormesh(*vGrid, phaseSDInterp, norm=mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto')
+    pcm_ = ax.pcolormesh(*vGrid, phaseSDInterp, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), shading='auto', cmap='viridis')
+    if fig is not None:
+        cax_gap = cax_width / 3
+        ax_pos = ax.get_position()
+        cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
+        cax = fig.add_axes(cax_pos)
+        cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'$f$', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+        cax.set_yticks(10.0**np.array([-8, -7, -6, -5, -4]))
+#cax.set_ylabel('DEF')
 #    xyLim = [-2000, 2000]
 #    xyTicks = np.arange(-2000, 2001, 1000)
 #    ax.set_ylim(xyLim)
@@ -344,11 +372,14 @@ def plotPhaseSpaceDensityCut(ax, phaseSpaceDensity, vTable, vThetaTable, vPhiTab
     ax.pcolormesh(vPhiMesh, vMesh, phaseSpaceDensityCut)
     ax.grid(True)
 
-def interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable, vThetaTable, vPhiTable):
+def interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable=None, vThetaTable=None, vPhiTable=None, phasePointsSpherical=None):
     phaseSpaceDensity = phaseSpaceDensity.flatten()
-    vPointsMeshgridSpherical = np.meshgrid(vTable, vThetaTable, vPhiTable, indexing='ij')
-    vPointsCartesian = dat.spherical2cartesian(np.stack(vPointsMeshgridSpherical, axis=-1).reshape(-1, 3))
-    interp = dat.interpolate.NearestNDInterpolator(vPointsCartesian, phaseSpaceDensity)
+    if phasePointsSpherical is None:
+        vPointsMeshgridSpherical = np.meshgrid(vTable, vThetaTable, vPhiTable, indexing='ij')
+        phasePointsCartesian = dat.spherical2cartesian(np.stack(vPointsMeshgridSpherical, axis=-1).reshape(-1, 3))
+    else:
+        phasePointsCartesian = dat.spherical2cartesian(phasePointsSpherical)
+    interp = dat.interpolate.NearestNDInterpolator(phasePointsCartesian, phaseSpaceDensity)
     return interp
 
 

@@ -1230,7 +1230,7 @@ def c1BasisInC2Basis(c1BasisInC3Basis, c2BasisInC3Basis):
 def unit_quaternion_spherical_linear_interpolation(tNew, tOri, q):
     '''
     Purpose:
-        to interpolate the unit quaternion for coordinate transformation of vectors. see the Calibration and Measurement Algorithms Document for MMS, G-7
+        to interpolate the unit quaternion for coordinate transformation of vectors. see the Calibration and Measurement Algorithms Document for MMS, Section 3, G-7
     Parameters:
         tNew: the x-coordinates at which to evaluate the interpolated values
         tOri: 1-D array [n], the x-coordinates of the original data
@@ -1706,6 +1706,15 @@ def quaternionMultiply(qs, scalarPos='last'):
            q = quaternionMultiply((q1, q2))
        return q
     else: raise Exception
+
+def rotateVectorUsingQuaternion(vec, quat, scalarPos='last'):
+    quat_inverse = np.copy(quat)
+    quat_inverse[..., :3] *= -1
+    vec_quat = np.zeros((*vec.shape[:-1], 4))
+    vec_quat[..., :3] = vec
+    new_vec = quaternionMultiply([quat, vec_quat, quat_inverse])
+    return new_vec
+
 
 def mask_dict_of_ndarray(dic, mask, copy=False):
     dic_new = {}
