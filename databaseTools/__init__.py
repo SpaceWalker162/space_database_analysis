@@ -631,7 +631,7 @@ class FileDownloadCommander:
         self.monitors[i].join()
         del self.workers[i]
         del self.monitors[i]
-        logging.debug('A worker is fired')
+        logging.debug('A worker was fired at {}'.format(datetime.now()))
         logging.info('active threads: {}'.format(threading.active_count()))
 
 
