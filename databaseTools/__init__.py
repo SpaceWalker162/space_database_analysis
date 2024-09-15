@@ -164,7 +164,7 @@ class Database:
                 dataset.update({'dataset_file_time_gap': '1 day'})
             if 'HPCA_SRVY' in dID:
                 dataset.update({'dataset_file_time_gap': 'irregular'})
-        if dID[:2] == 'TH':
+        if dID[:2] == 'TH': # themis
             ma = re.fullmatch('TH[A-G]_', dID[:4])
             if ma is not None:
                 dataset_path = os.path.join('themis', *dID.split('_')).lower()
@@ -180,6 +180,14 @@ class Database:
         elif dID[:3] == 'PSP':
             if 'PSP_FLD_L2_MAG_RTN' == dID:
                 dataset_path = os.path.join('psp', 'fields', 'l2', 'mag_rtn')
+                dataset.update({'dataset_path': dataset_path})
+        elif dID[:2] == 'AC': # ACE
+            dIDComponents = dID.split('_')
+            if dIDComponents[-1] == 'MFI':
+                dataset_path = os.path.join('ace', 'mag', 'level_2_cdaweb', 'mfi_'+dIDComponents[1].lower())
+                dataset.update({'dataset_path': dataset_path})
+            elif dIDComponents[-1] == 'SWE':
+                dataset_path = os.path.join('ace', 'swepam', 'level_2_cdaweb', 'swe_'+dIDComponents[1].lower())
                 dataset.update({'dataset_path': dataset_path})
         return dataset
 

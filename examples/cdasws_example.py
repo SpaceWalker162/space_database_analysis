@@ -9,17 +9,19 @@ if __name__ == '__main__':
     cdaswsObj = cdasws.CdasWs()
     observatories = cdaswsObj.get_observatories()
     for observatory in observatories:
-        if 'th' in observatory['Name'].lower():
+        if 'ac' in observatory['Name'].lower():
             print(observatory['Name'])
     cdaswsObj.get_instrument_types()
-    cdaswsObj.get_instrument_types(observatory='THA')
-    cdaswsObj.get_instruments(observatory='THA')
-    datasets = cdaswsObj.get_datasets(observatory='THA', instrument='L2')
+    cdaswsObj.get_instrument_types(observatory='AC')
+    instruments = cdaswsObj.get_instruments(observatory='AC')
+    instruments
+    datasets = cdaswsObj.get_datasets(observatory='AC', instrument='MAG')
     datasets
     for dataset in datasets:
         print(dataset['Id'])
     dataset = datasets[-1]
     dataset = datasets[4]
+    dataset
     from urllib.parse import urlparse
     from urllib.request import urlretrieve
     for d_ in dataset['AdditionalMetadata']:

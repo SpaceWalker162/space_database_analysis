@@ -22,8 +22,10 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     '''
     Time series may contain gap, this function replace the original method plot to better tackle the gaps in plot by not plotting them.
     Parameters:
-        gap_threshold: two data point with a gap larger than this will not be connected in plot. If this parameter is not given, 5 * minimum gap in time series will be used.
-        time_data: when the first parameter args[0] is not time, this parameter should be provided to break all data into blocks. This parameter can be used in the case of plotting trajectory of spacecraft that is not continuous
+            kwargs:
+                enable: bool, Defualt:True. If true, this function will plot the data into segments divided by gaps in the data. Otherwise, this function is identical to matplotlib.axes.Axes.plot
+                gap_threshold: two data point with a gap larger than this will not be connected in plot. If this parameter is not given, 5 * minimum gap in time series will be used.
+                time_data: when the first parameter args[0] is not time, this parameter should be provided to break all data into blocks. This parameter can be used in the case of plotting trajectory of spacecraft that is not continuous
     '''
     assert len(args) == 2
     x = args[0]
@@ -55,9 +57,12 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
             y_ = y[s_]
             plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
             plots_.append(plot_)
+        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
         return plots_
     else:
-        return self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
+        plot_ = self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
+        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+        return plot_
 
 mpl.axes.Axes.plot_time_series = plot_time_series
 
@@ -71,9 +76,31 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
         ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
     if norm:
         ax.plot_time_series(t, np.linalg.norm(data[..., :3], axis=-1), color='k', label=label, **kwargs)
+    y_major = mpl.ticker.MaxNLocator(nbins=4, symmetric=True, min_n_ticks=4)
+    ax.yaxis.set_major_locator(y_major)
     ax.set_ylabel(label)
     ax.grid(True)
     return ax
+
+
+def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None):
+    if isinstance(notations, str):
+        if notations == 'alphabetical':
+            notations = [chr(notation) for notation in np.arange(0, len(epochs)) + ord('a')]
+
+    figInv = fig.transFigure.inverted()
+    for ind, epoch_ in enumerate(epochs):
+        p1 = figInv.transform(axes[0].transData.transform(np.array([epoch_, axes[0].get_ylim()[1]])))
+        p2 = figInv.transform(axes[-1].transData.transform(np.array([epoch_, axes[-1].get_ylim()[0]])))
+        points = np.stack([p1, p2])
+        fig.add_artist(mpl.lines.Line2D(*points.T, color='k', ls='--', lw=1.5))
+        if notations is None:
+            pass
+        elif isinstance(notations, list):
+            notation = notations[ind]
+            # the following code needs to be corrected
+#            fig.text(x=p1[0], y=p1[1]+0.01, s=notation, transform=axes[0].transData, horizontalalignment='center', verticalalignment='top')
+            axes[0].text(x=epoch_, y=axes[0].get_ylim()[1], s=notation, transform=axes[0].transData, horizontalalignment='center', verticalalignment='bottom')
 
 
 def plotSphericalCoordinatesOfVectorTimeSeries(ax, t , data):
@@ -331,13 +358,13 @@ def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None
     vGrid = np.meshgrid(vPlotGrid, vPlotGrid, indexing='ij')
     vzGrid = np.zeros_like(vGrid[0])
     if integration is None:
-        phaseSDInterp = interp(*vGrid, vzGrid)
+        phaseSDInterp = interp(*vGrid, vzGrid).astype(np.float64)
         ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
     else:
         if integration == 'z':
             vGridAllIntegration = [np.repeat(grid[..., None], integrationStepsN, axis=-1) for grid in vGrid]
             vzGridAllIntegration = vzGrid[..., None] + np.linspace(*vRange, integrationStepsN)
-            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration) * np.diff(vRange)/integrationStepsN, axis=-1)
+            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration).astype(np.float64) * np.diff(vRange)/integrationStepsN, axis=-1)
 #    pcm_ = ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
     data = phaseSDInterp
     fUni = np.unique(data)
@@ -353,7 +380,7 @@ def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None
         cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
         cax = fig.add_axes(cax_pos)
         cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'$f$', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
-        cax.set_yticks(10.0**np.array([-8, -7, -6, -5, -4]))
+#        cax.set_yticks(10.0**np.array([-8, -7, -6, -5, -4]))
 #cax.set_ylabel('DEF')
 #    xyLim = [-2000, 2000]
 #    xyTicks = np.arange(-2000, 2001, 1000)
