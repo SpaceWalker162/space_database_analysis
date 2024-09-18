@@ -670,6 +670,7 @@ class FileDownloader(threading.Thread):
             logging.info(lgMess)
         while True:
             self.currentWork = self.pendingWorks.get()
+            logging.debug('a work gotten')
             srcName, dstName = self.currentWork
             try:
                 downloadStart = datetime.now()
@@ -702,6 +703,7 @@ class FileDownloader(threading.Thread):
             logging.info('{} downloaded at {}'.format(dstName, datetime.now()))
             logging.info(" size: {}M, time cost: {}, download speed: {:.3f}M/s" .format(fileSizeInM, timeCost, speed))
             self.finishedAWork.set()
+            logging.debug('a work finished')
 
     def _handle_exception_during_downloading(self, f):
         if hasattr(self, 'ftp'):
