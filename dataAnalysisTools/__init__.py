@@ -769,15 +769,14 @@ class Epochs:
         epochs = self.get_data(fm=fm)
         records = np.argmin(np.abs(ts - epochs[..., None]), axis=-1)
         if fm == 'CDF_EPOCH':
-            if np.all(np.abs(ts[..., records] - epochs) < tolerance*1000):
-                return records
-            else:
-                raise Exception("records not found")
-        if fm == 'CDF_TIME_TT2000':
-            if np.all(np.abs(ts[..., records] - epochs) < tolerance*10**9):
-                return records
-            else:
-                raise Exception("records not found")
+            unit_conversion = 1000
+        elif fm == 'CDF_TIME_TT2000':
+            unit_conversion = 10**9
+        tolerance_mask = np.abs(ts[..., records] - epochs) > tolerance*unit_conversion
+        if np.any(tolerance_mask):
+            records = records.astype(np.float64)
+            records[tolerance_mask] = np.nan # nan representing out of tolerance range
+        return records
 
     def findepochrange(self, fm='datetime', start_time=None, end_time=None):
         for fm_local, data in self.data.items():

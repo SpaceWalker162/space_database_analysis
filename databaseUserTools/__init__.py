@@ -436,9 +436,13 @@ class Dataset:
         self.databasePath = databasePath
         self.database = dbt.Database(databasePaths=[databasePath])
         self.databaseBakPaths = databaseBakPaths
-        self.databaseBak = dbt.Database(databasePaths=databaseBakPaths)
+        if databaseBakPaths is not None:
+            self.databaseBak = dbt.Database(databasePaths=databaseBakPaths)
+            self.dataBakPaths = [os.path.join(databaseBakPath, 'data') for databaseBakPath in self.databaseBakPaths]
+        else:
+            self.databaseBak = None
+            self.dataBakPaths = None
         self.dataPath = os.path.join(self.databasePath, 'data')
-        self.dataBakPaths = [os.path.join(databaseBakPath, 'data') for databaseBakPath in self.databaseBakPaths]
         if dataset_info:
             self.datasetID = dataset_info['Id']
             self.dataset_info = dataset_info
@@ -472,7 +476,10 @@ class Dataset:
         if not self.datasetPathInDatabaseData:
             self.datasetPathInDatabaseData = os.path.join(*self.datasetID.lower().split('_'))
         self.datasetAbsolutePath = os.path.join(self.dataPath, self.datasetPathInDatabaseData)
-        self.datasetAbsoluteBakPaths = [os.path.join(dataBakPath, self.datasetPathInDatabaseData) for dataBakPath in self.dataBakPaths]
+        if self.dataBakPaths is not None:
+            self.datasetAbsoluteBakPaths = [os.path.join(dataBakPath, self.datasetPathInDatabaseData) for dataBakPath in self.dataBakPaths]
+        else:
+            self.datasetAbsoluteBakPaths = None
 
     def _get_file_time_limits(self, dateTime):
         if isinstance(self.dataset_file_time_gap, timedelta):
