@@ -80,6 +80,16 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     ax.yaxis.set_major_locator(y_major)
     ax.set_ylabel(label)
     ax.grid(True)
+
+    labelHeight = 0.2
+    vectorLabelX = 1.01
+    vectorLabelPos = np.zeros((4, 2))
+    vectorLabelPos[:, 0] = vectorLabelX
+    vectorLabelPos[:, 1] = 0.85 - np.arange(0, 4) * labelHeight
+
+    for ind in range(3):
+        ax.text(vectorLabelPos[ind, 0], vectorLabelPos[ind, 1], s=labels[ind], color=colors[ind], transform=ax.transAxes)
+    ax.text(vectorLabelPos[3, 0], vectorLabelPos[3, 1], s='$'+label+'$', color='k', transform=ax.transAxes)
     return ax
 
 
@@ -514,7 +524,7 @@ def plot_PSD_spectrogram_from_partial_numberdensity(fig, ax, epochs, energy_tabl
 #    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     ax.set_ylabel('E [eV]')
 
-def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', cax_width=0.02):
+def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02):
     '''
     this function work for mms fpi moms, mms1_dis_energyspectr_omni_fast
 
@@ -523,8 +533,11 @@ def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, e
     data = omnidirectional_differential_energy_flux
     tMesh, energyMesh = np.meshgrid(epochs.get_data(epoch_fmt), energy_table, indexing='ij')
     fUni = np.unique(data)
-    vmin = fUni[fUni>0][0]
-    pcm_ = ax.pcolormesh(tMesh, energyMesh, data, norm=mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto', cmap='jet')
+    if vmin is None:
+        vmin = fUni[fUni>0][0]
+    if vmax is None:
+        vmax = data.max()
+    pcm_ = ax.pcolormesh(tMesh, energyMesh, data, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), shading='auto', cmap='jet')
     ax.set_yscale('log')
     y_major = mpl.ticker.LogLocator(base = 10.0, numticks = 6)
     ax.yaxis.set_major_locator(y_major)
