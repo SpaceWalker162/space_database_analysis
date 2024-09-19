@@ -7,6 +7,8 @@ import space_database_analysis.databaseUserTools as dut
 import functools
 #from datetime import datetime
 import datetime as dt
+from astropy.time import Time, TimeDelta
+from astropy import units as u
 from itertools import combinations
 from scipy.signal import butter, lfilter, freqz
 from scipy.optimize import fsolve
@@ -678,15 +680,15 @@ class Epochs:
         epochs: a ndarray
     '''
 
-    standard_fm ='CDF_TIME_TT2000_components'
-
-    def __init__(self, datetime=None, CDF_EPOCH=None, CDF_TIME_TT2000=None):
+    def __init__(self, datetime=None, CDF_EPOCH=None, CDF_TIME_TT2000=None, standard_fm='astropy_Time'):
         '''
         Parameters:
             datetime: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance. This format refers to datetime.datetime
             CDF_EPOCH: a list nested to any degree of depth or a ndarray.
             CDF_TIME_TT2000: a list nested to any degree of depth or a ndarray.
+            standard_fm: standard internal format for storage. 'astropy_Time ' is the default. 'CDF_TIME_TT2000_components' is deprecated.
         '''
+        self.standard_fm = standard_fm
         self.data = {}
         if isinstance(datetime, dt.datetime):
             datetime = [datetime]
@@ -703,8 +705,11 @@ class Epochs:
         self.data['CDF_TIME_TT2000'] = CDF_TIME_TT2000
         for data_format, data in self.data.items():
             if data is not None:
-                components = Epochs.breakdown(data=data, fm=data_format)
-                self.standard_data = components
+                if self.standard_fm == 'CDF_TIME_TT2000_components':
+                    components = Epochs.breakdown(data=data, fm=data_format)
+                    self.standard_data = components
+                elif self.standard_fm == 'astropy_Time':
+                    self.standard_data = Epochs.convert_to_standard_data(data, fm=data_format)
                 break
 
 #        datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
@@ -718,6 +723,15 @@ class Epochs:
 #                epochs = np.array(epochs)
 #            self.epochs = epochs
 #            self.dateTimeList = map_multi_dimensional_list(epoch2datetimeWithEpochType, epochs.tolist())
+    @classmethod
+    def convert_to_standard_data(cls, data, fm):
+        if fm == 'CDF_EPOCH':
+            encoded_data = cdflib.epochs.CDFepoch.encode_epoch(data)
+            return Time(encoded_data)
+        elif fm == 'CDF_TIME_TT2000':
+            return Time(2000, format='jyear') + TimeDelta(data/10**9*u.s)
+        elif fm == 'datetime':
+            return Time(data)
 
     @classmethod
     def breakdown(cls, data, fm):
@@ -726,13 +740,12 @@ class Epochs:
         elif fm == 'CDF_TIME_TT2000':
             components = cdflib.epochs.CDFepoch.breakdown_tt2000(data)
         elif fm == 'datetime':
-            epochType = ('_').join(cls.standard_fm.split('_')[:-1])
-            components = np.array(map_multi_dimensional_list(functools.partial(ot.datetime2list, epochType=epochType), data)).squeeze()
+            components = np.array(map_multi_dimensional_list(functools.partial(ot.datetime2list, epochType='CDF_TIME_TT2000'), data)).squeeze()
 #            components = ot.datetime2list(data, epochType=epochType)
         return components
 
-    @staticmethod
-    def compute(components, fm):
+    @classmethod
+    def compute(cls, components, fm): # from components to other format
         if fm == 'datetime':
             if len(components.shape) == 1:
                 data = [dt.datetime(*components[:6])]
@@ -748,12 +761,28 @@ class Epochs:
                 data = data[..., None]
         return data
 
+    @staticmethod
+    def convert_from_astropy_Time(astropy_Time, fm):
+        if fm == 'datetime':
+            data = astropy_Time.utc.datetime
+        else:
+            if fm == 'CDF_EPOCH':
+                data = Epochs.compute(Epochs.breakdown(astropy_Time.utc.datetime, fm='datetime'), fm='CDF_EPOCH')
+            elif fm == 'CDF_TIME_TT2000':
+                data = (astropy_Time - Time(2000, format='jyear')).sec * 10**9
+            if len(data.shape) == 0:
+                data = data[..., None]
+        return data
+
     def get_data(self, fm=None):
         if fm:
             if self.data[fm] is not None:
                 pass
             else:
-                self.data[fm] = self.compute(self.standard_data, fm)
+                if self.standard_fm == 'astropy_Time':
+                    self.data[fm] = Epochs.convert_from_astropy_Time(self.standard_data, fm)
+                elif self.standard_fm == 'CDF_TIME_TT2000_components':
+                    self.data[fm] = self.compute(self.standard_data, fm)
         else:
             fm = self.standard_fm
         return self.data[fm]
