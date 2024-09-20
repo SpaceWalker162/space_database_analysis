@@ -535,6 +535,7 @@ class FileDownloadCommander:
         self.monitors = []
         self.preparePendingWorks()
         self.protocol = protocol
+        self.failedTries = []
 
     def preparePendingWorks(self, source='remoteFileNames'):
         if source == 'remoteFileNames':
@@ -613,6 +614,12 @@ class FileDownloadCommander:
         while len(self.pendingWorks) > 0 or len(self.workers) > 0:
             if len(self.workers) < self.workerNumber:
                 if len(self.pendingWorks) > 0:
+                    numberOfFailedTriesToPauseAWhile = 5
+                    if len(self.failedTries) > numberOfFailedTriesToPauseAWhile:
+                        if self.failedTries[-1] - self.failedTries[-numberOfFailedTriesToPauseAWhile] < timedelta(minutes=numberOfFailedTriesToPauseAWhile):
+                            time_to_sleep = 60*20
+                            time.sleep(time_to_sleep)
+                            logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, next try will begain after {time_to_sleep} seconds.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile, time_to_sleep=time_to_sleep))
                     self.addWorkerAndMonitor()
             if len(self.workers) > 0:
                 listenToWorkers()
@@ -639,7 +646,9 @@ class FileDownloadCommander:
         self.monitors[i].join()
         del self.workers[i]
         del self.monitors[i]
-        logging.debug('A worker was fired at {}'.format(datetime.now()))
+        kill_time = datetime.now()
+        self.failedTries.append(kill_time)
+        logging.debug('A worker was fired at {}'.format(kill_time))
         logging.info('active threads: {}'.format(threading.active_count()))
 
 
