@@ -618,8 +618,8 @@ class FileDownloadCommander:
                     if len(self.failedTries) > numberOfFailedTriesToPauseAWhile:
                         if self.failedTries[-1] - self.failedTries[-numberOfFailedTriesToPauseAWhile] < timedelta(minutes=numberOfFailedTriesToPauseAWhile):
                             time_to_sleep = 60*20
-                            time.sleep(time_to_sleep)
                             logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, next try will begain after {time_to_sleep} seconds.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile, time_to_sleep=time_to_sleep))
+                            time.sleep(time_to_sleep)
                     self.addWorkerAndMonitor()
             if len(self.workers) > 0:
                 listenToWorkers()
