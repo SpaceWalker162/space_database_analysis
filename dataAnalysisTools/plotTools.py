@@ -93,17 +93,19 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     return ax
 
 
-def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None):
+def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None, color='k'):
     if isinstance(notations, str):
         if notations == 'alphabetical':
             notations = [chr(notation) for notation in np.arange(0, len(epochs)) + ord('a')]
+        elif notations == 'numerical':
+            notations = [str(ind) for ind in range(1, len(epochs)+1)]
 
     figInv = fig.transFigure.inverted()
     for ind, epoch_ in enumerate(epochs):
         p1 = figInv.transform(axes[0].transData.transform(np.array([epoch_, axes[0].get_ylim()[1]])))
         p2 = figInv.transform(axes[-1].transData.transform(np.array([epoch_, axes[-1].get_ylim()[0]])))
         points = np.stack([p1, p2])
-        fig.add_artist(mpl.lines.Line2D(*points.T, color='k', ls='--', lw=1.5))
+        fig.add_artist(mpl.lines.Line2D(*points.T, color=color, ls='--', lw=1.5))
         if notations is None:
             pass
         elif isinstance(notations, list):
