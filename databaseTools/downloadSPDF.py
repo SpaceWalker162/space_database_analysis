@@ -130,6 +130,6 @@ def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSourc
             total_size += float(toD[-1])
     print('number of files to download: {}'.format(len(filePaths)))
     print('total size to download: {}'.format(ot.sizeof_fmt(total_size)))
-    ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=20, workerNumber=workerNumber, monitorInterval=10, protocol=protocol)
+    ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=120, workerNumber=workerNumber, monitorInterval=10, protocol=protocol)
     ftpDownloader.processQueue()
     print('End of the Program')

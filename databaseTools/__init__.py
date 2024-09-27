@@ -21,6 +21,7 @@ import re
 import functools
 import threading
 import socket
+import contextlib
 #import concurrent.futures
 import logging
 import ctypes
@@ -692,15 +693,17 @@ class FileDownloader(threading.Thread):
                     elif self.protocol == 'http':
                         url_ = urljoin('https://' + self.host, srcName)
                         http = urllib3.PoolManager()
-                        resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
-                        logging.info('downloading {} from {}'.format(dstName, url_))
-                        for chunk in resp.stream(self.blocksize):
-                            try:
+                        with contextlib.closing(http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))) as resp:
+#                        resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
+                            logging.info('downloading {} from {}'.format(dstName, url_))
+                            for chunk in resp.stream(self.blocksize):
                                 self.callback(chunk)
-                            except Exception as e:
-                                resp.close()
-                                raise e
-                        resp.release_conn()
+#                            try:
+#                                self.callback(chunk)
+#                            except Exception as e:
+#                                resp.close()
+#                                raise e
+                            resp.release_conn()
                     fInd, f = self.fInfo.get()
             except KeyboardInterrupt:
                 self._handle_exception_during_downloading(f)
@@ -1188,11 +1191,17 @@ def readFileInfoRecursively(path='.', verbose=False, facts='stats'):
                             objFact['size'] = stat.st_size
                         if 'size-h' in facts:
                             ss_ = ot.sizeof_fmt(stat.st_size, fmt=False)[:-2].strip()
-                            num = float(ss_[:-1])
+                            if ss_:
+                                num = float(ss_[:-1])
+                            else:
+                                num = 0.0
                             if num >= 9.95:
                                 sizeH = str(ot.round_number(num)) + ss_[-1]
                             else:
-                                sizeH = str(ot.round_number(num, 1)) + ss_[-1]
+                                if num == 0.0:
+                                    sizeH = '0B'
+                                else:
+                                    sizeH = str(ot.round_number(num, 1)) + ss_[-1]
                             objFact['size-h'] = sizeH
                     elif facts is None:
                         objFact = {'name': obj.name}
