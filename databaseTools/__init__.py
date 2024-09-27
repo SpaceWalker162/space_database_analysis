@@ -695,7 +695,11 @@ class FileDownloader(threading.Thread):
                         resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
                         logging.info('downloading {} from {}'.format(dstName, url_))
                         for chunk in resp.stream(self.blocksize):
-                            self.callback(chunk)
+                            try:
+                                self.callback(chunk)
+                            except Exception as e:
+                                resp.close()
+                                raise e
                         resp.release_conn()
                     fInd, f = self.fInfo.get()
             except KeyboardInterrupt:
