@@ -595,7 +595,7 @@ class FileDownloadCommander:
                             work = self.pendingWorks.pop()
                             worker.pendingWorks.put(work)
                         else:
-                            self.killWorkerAndMonitor(i)
+                            self.stopWorkerAndMonitor(i)
                         self.reportProgress()
                 else:
                     self.processedN += 1
@@ -640,6 +640,18 @@ class FileDownloadCommander:
         monitor.start()
         self.monitors.append(monitor)
 
+    def stopWorkerAndMonitor(self, i):
+        self.workers[i].stop()
+        self.monitors[i].stop()
+        self.workers[i].join()
+        self.monitors[i].join()
+        del self.workers[i]
+        del self.monitors[i]
+        kill_time = datetime.now()
+        self.failedTries.append(kill_time)
+        logging.debug('A worker was fired at {}'.format(kill_time))
+        logging.info('active threads: {}'.format(threading.active_count()))
+
     def killWorkerAndMonitor(self, i):
         self.workers[i].kill()
         self.monitors[i].kill()
@@ -652,8 +664,18 @@ class FileDownloadCommander:
         logging.debug('A worker was fired at {}'.format(kill_time))
         logging.info('active threads: {}'.format(threading.active_count()))
 
+class StoppableThread(threading.Thread):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stop_event = threading.Event()
 
-class FileDownloader(threading.Thread):
+    def stop(self):
+        self._stop_event.set()
+
+    def stopped(self):
+        return self._stop_event.is_set()
+
+class FileDownloader(StoppableThread):
     def __init__(self, host=None, currentWork=None, fInfo=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp'):
         self.host = host
         self.fInfo = fInfo
@@ -678,7 +700,7 @@ class FileDownloader(threading.Thread):
             self.ftp = ReconnectingFTP(self.host, timeout=self.timeout)
             lgMess = self.ftp.login()
             logging.info(lgMess)
-        while True:
+        while not self.stopped():
             self.currentWork = self.pendingWorks.get()
             logging.debug('a work gotten')
             srcName, dstName = self.currentWork
@@ -751,7 +773,7 @@ class FileDownloader(threading.Thread):
 #        self.join()
 
 
-class FileDownloadMonitor(threading.Thread):
+class FileDownloadMonitor(StoppableThread):
     def __init__(self, fInfo, alarmingSpeed=8192*5, allowSlowSpeedN=3, monitorInterval=10):
         self.fInfo = fInfo
         self.alarmingSpeed = alarmingSpeed
@@ -780,7 +802,7 @@ class FileDownloadMonitor(threading.Thread):
         self.fInfo.put((fInd, f))
         time.sleep(self.monitorInterval)
         self.alarmingSize = self.alarmingSpeed * self.monitorInterval
-        while not self.badWorker.is_set():
+        while not (self.badWorker.is_set() or self.stopped()):
             fInd, f = self.fInfo.get()
             if fInd > self.fInd:
                 self.fInd = fInd
