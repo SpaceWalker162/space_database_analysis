@@ -580,6 +580,7 @@ class FileDownloadCommander:
 
     def reportProgress(self):
         logging.info('progress: {}/{}'.format(self.processedN, self.worksN))
+        logging.debug('pending: {}'.format(len(self.pendingWorks)))
         logging.info('failed: {}'.format(len(self.failedWorks)))
         logging.info('active threads: {}'.format(threading.active_count()))
 
@@ -591,12 +592,12 @@ class FileDownloadCommander:
                     if worker.finishedAWork.is_set():
                         self.processedN += 1
                         worker.finishedAWork.clear()
+                        self.reportProgress()
                         if len(self.pendingWorks) > 0:
-                            work = self.pendingWorks.pop()
-                            worker.pendingWorks.put(work)
+                            worker.pendingWorks.put(self.pendingWorks.pop())
+                            logging.debug('a pending work assigned to a worker')
                         else:
                             self.stopWorkerAndMonitor(i)
-                        self.reportProgress()
                 else:
                     self.processedN += 1
                     self.failedWorks.append(worker.currentWork)
@@ -624,7 +625,7 @@ class FileDownloadCommander:
                     self.addWorkerAndMonitor()
             if len(self.workers) > 0:
                 listenToWorkers()
-                listenToMonitors()
+#                listenToMonitors() # I am trying to replace monitor with timeout in worker for both ftp and http
         if self.keepDownloading and len(self.failedWorks) > 0:
             self.preparePendingWorks(source='failedWorks')
             self.processQueue()
