@@ -649,7 +649,7 @@ class FileDownloadCommander:
         del self.monitors[i]
         kill_time = datetime.now()
         self.failedTries.append(kill_time)
-        logging.debug('A worker was fired at {}'.format(kill_time))
+        logging.debug('A worker was stopped at {}'.format(kill_time))
         logging.info('active threads: {}'.format(threading.active_count()))
 
     def killWorkerAndMonitor(self, i):
