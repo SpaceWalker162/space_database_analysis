@@ -136,6 +136,9 @@ class DictTree(dict):
         return DictTree(dic)
 
 def compareDictRecursively(d1, d2):
+    '''
+    return a dictionary whose entries are those in d1 and not in d2. d1 and d2 should not contain value of None type.
+    '''
     d1Sole = {}
     for key, d1Value in d1.items():
         try: d2Value = d2[key]
@@ -148,7 +151,8 @@ def compareDictRecursively(d1, d2):
             d1SoleKey = compareDictRecursively(d1Value, d2Value)
         else:
             d1SoleKey = d1Value
-        d1Sole[key] = d1SoleKey
+        if d1SoleKey:
+            d1Sole[key] = d1SoleKey
     return d1Sole
 
 

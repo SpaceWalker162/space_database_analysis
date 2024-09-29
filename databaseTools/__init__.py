@@ -597,8 +597,11 @@ class FileDownloadCommander:
                             worker.pendingWorks.put(self.pendingWorks.pop())
                             logging.debug('a pending work assigned to a worker')
                         else:
+                            logging.debug('commander: stopping a worker')
                             self.stopWorkerAndMonitor(i)
+                            logging.debug('commander: a worker stopped')
                 else:
+                    logging.debug('commander: the worker is not alive')
                     self.processedN += 1
                     self.failedWorks.append(worker.currentWork)
                     self.reportProgress()
@@ -633,21 +636,20 @@ class FileDownloadCommander:
     def addWorkerAndMonitor(self):
         fInfo = queue.LifoQueue()
         worker = FileDownloader(host=self.host, fInfo=fInfo, verbose=self.verbose, blocksize=self.blocksize, timeout=self.timeout, protocol=self.protocol)
-        work = self.pendingWorks.pop()
-        worker.pendingWorks.put(work)
+        worker.pendingWorks.put(self.pendingWorks.pop())
         worker.start()
         self.workers.append(worker)
-        monitor = FileDownloadMonitor(fInfo=fInfo)
-        monitor.start()
-        self.monitors.append(monitor)
+#        monitor = FileDownloadMonitor(fInfo=fInfo, timeout=self.timeout)
+#        monitor.start()
+#        self.monitors.append(monitor)
 
     def stopWorkerAndMonitor(self, i):
         self.workers[i].stop()
-        self.monitors[i].stop()
+#        self.monitors[i].stop()
         self.workers[i].join()
-        self.monitors[i].join()
+#        self.monitors[i].join()
         del self.workers[i]
-        del self.monitors[i]
+#        del self.monitors[i]
         kill_time = datetime.now()
         self.failedTries.append(kill_time)
         logging.debug('A worker was stopped at {}'.format(kill_time))
@@ -655,11 +657,13 @@ class FileDownloadCommander:
 
     def killWorkerAndMonitor(self, i):
         self.workers[i].kill()
-        self.monitors[i].kill()
+#        self.monitors[i].kill()
         self.workers[i].join()
-        self.monitors[i].join()
+        logging.debug('worker joined')
+#        self.monitors[i].join()
+#        logging.debug('monitor joined')
         del self.workers[i]
-        del self.monitors[i]
+#        del self.monitors[i]
         kill_time = datetime.now()
         self.failedTries.append(kill_time)
         logging.debug('A worker was fired at {}'.format(kill_time))
@@ -695,6 +699,15 @@ class FileDownloader(StoppableThread):
         f.write(cont)
         self.fInfo.put((fInd, f))
 
+    def get_work(self):
+        try:
+            self.currentWork = self.pendingWorks.get(timeout=20)
+        except queue.Empty:
+            if self.stopped():
+                return True
+            else:
+                return self.get_work()
+
     def process(self):
         if self.protocol == 'ftp':
             logging.info('connecting ftp server at {}'.format(self.host))
@@ -702,9 +715,11 @@ class FileDownloader(StoppableThread):
             lgMess = self.ftp.login()
             logging.info(lgMess)
         while not self.stopped():
-            self.currentWork = self.pendingWorks.get()
-            logging.debug('a work gotten')
+            breakQ = self.get_work()
+            if breakQ:
+                break
             srcName, dstName = self.currentWork
+            logging.debug('a work gotten with source name: {}\nand destination name: {}'.format(srcName, dstName))
             try:
                 downloadStart = datetime.now()
                 with open(dstName, 'wb') as f:
@@ -728,6 +743,7 @@ class FileDownloader(StoppableThread):
 #                                raise e
                             resp.release_conn()
                     fInd, f = self.fInfo.get()
+                    del f
             except KeyboardInterrupt:
                 self._handle_exception_during_downloading(f)
                 raise KeyboardInterrupt
@@ -743,6 +759,7 @@ class FileDownloader(StoppableThread):
             logging.info(" size: {}M, time cost: {}, download speed: {:.3f}M/s" .format(fileSizeInM, timeCost, speed))
             self.finishedAWork.set()
             logging.debug('a work finished')
+        logging.debug('worker: not in while loop')
 
     def _handle_exception_during_downloading(self, f):
         if hasattr(self, 'ftp'):
@@ -775,11 +792,12 @@ class FileDownloader(StoppableThread):
 
 
 class FileDownloadMonitor(StoppableThread):
-    def __init__(self, fInfo, alarmingSpeed=8192*5, allowSlowSpeedN=3, monitorInterval=10):
+    def __init__(self, fInfo, alarmingSpeed=8192*5, allowSlowSpeedN=3, monitorInterval=10, timeout=20):
         self.fInfo = fInfo
         self.alarmingSpeed = alarmingSpeed
         self.allowSlowSpeedN = allowSlowSpeedN
         self.monitorInterval = monitorInterval
+        self.timeout = timeout
         self.slowSpeedN = 0
         self.downloadedSize = 0
         self.fInd = -1
@@ -795,6 +813,15 @@ class FileDownloadMonitor(StoppableThread):
             logging.info('Monitor report: Error: download speed slower than {}kB/s'.format(self.alarmingSpeed/8/1024))
             self.badWorker.set()
 
+    def get_file_handle(self):
+        try:
+            return self.fInfo.get(timeout=self.timeout)
+        except queue.Empty:
+            if self.stopped():
+                return True
+            else:
+                return self.get_file_handle()
+
     def watch(self):
         fInd, f = self.fInfo.get()
         if fInd > self.fInd:
@@ -804,7 +831,11 @@ class FileDownloadMonitor(StoppableThread):
         time.sleep(self.monitorInterval)
         self.alarmingSize = self.alarmingSpeed * self.monitorInterval
         while not (self.badWorker.is_set() or self.stopped()):
-            fInd, f = self.fInfo.get()
+            ret_ = self.get_file_handle()
+            if ret_ is True:
+                break
+            else:
+                fInd, f = ret_
             if fInd > self.fInd:
                 self.fInd = fInd
                 self.workerProgress = f.tell()
@@ -813,6 +844,7 @@ class FileDownloadMonitor(StoppableThread):
                 self.check(workerProgress)
             self.fInfo.put((fInd, f))
             time.sleep(self.monitorInterval)
+        logging.debug('monitor: not in while loop')
 
     def get_id(self):
         # returns id of the respective thread
