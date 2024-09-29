@@ -699,6 +699,15 @@ class FileDownloader(StoppableThread):
         f.write(cont)
         self.fInfo.put((fInd, f))
 
+    def get_work(self):
+        try:
+            self.currentWork = self.pendingWorks.get(timeout=30)
+        except queue.Empty:
+            if self.stopped():
+                return True
+            else:
+                return self.get_work()
+
     def process(self):
         if self.protocol == 'ftp':
             logging.info('connecting ftp server at {}'.format(self.host))
@@ -706,7 +715,9 @@ class FileDownloader(StoppableThread):
             lgMess = self.ftp.login()
             logging.info(lgMess)
         while not self.stopped():
-            self.currentWork = self.pendingWorks.get()
+            breakQ = self.get_work()
+            if breakQ:
+                break
             srcName, dstName = self.currentWork
             logging.debug('a work gotten with source name: {}\nand destination name: {}'.format(srcName, dstName))
             try:
