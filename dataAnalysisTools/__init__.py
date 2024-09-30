@@ -764,7 +764,7 @@ class Epochs:
     @staticmethod
     def convert_from_astropy_Time(astropy_Time, fm):
         if fm == 'datetime':
-            data = astropy_Time.utc.datetime
+            data = astropy_Time.utc.to_datetime(timezone=dt.timezone.utc)
         else:
             if fm == 'CDF_EPOCH':
                 data = Epochs.compute(Epochs.breakdown(astropy_Time.utc.datetime, fm='datetime'), fm='CDF_EPOCH')

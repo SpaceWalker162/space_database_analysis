@@ -6,8 +6,7 @@ import pandas as pd
 #import constants as con
 import cdflib    # see github.com/MAVENSDC/cdflib
 #import tarfile
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 import shutil
 import os
 import sys
@@ -484,20 +483,20 @@ class Dataset:
     def _get_file_time_limits(self, dateTime):
         if isinstance(self.dataset_file_time_gap, timedelta):
             if self.dataset_file_time_gap == timedelta(days=1):
-                beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day)
+                beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, dateTime.day, tzinfo=timezone.utc)
                 endOfTheFilePeriod = beginOfTheFilePeriod + timedelta(days=1)
             elif self.dataset_file_time_gap < timedelta(days=1):
-                beginOfTheDay = datetime(dateTime.year, dateTime.month, dateTime.day)
+                beginOfTheDay = datetime(dateTime.year, dateTime.month, dateTime.day, tzinfo=timezone.utc)
                 completePeriodBefore = (dateTime - beginOfTheDay)//self.dataset_file_time_gap
                 beginOfTheFilePeriod = beginOfTheDay + completePeriodBefore * self.dataset_file_time_gap
                 endOfTheFilePeriod = beginOfTheDay + (completePeriodBefore+1)*self.dataset_file_time_gap 
         elif isinstance(self.dataset_file_time_gap, list):
             assert self.dataset_file_time_gap[0] == 'month'
-            beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, 1)
+            beginOfTheFilePeriod = datetime(dateTime.year, dateTime.month, 1, tzinfo=timezone.utc)
             if dateTime.month == 12:
-                endOfTheFilePeriod = datetime(dateTime.year+1, dateTime.month+len(self.dataset_file_time_gap)-12, 1)
+                endOfTheFilePeriod = datetime(dateTime.year+1, dateTime.month+len(self.dataset_file_time_gap)-12, 1, tzinfo=timezone.utc)
             else:
-                endOfTheFilePeriod = datetime(dateTime.year, dateTime.month+len(self.dataset_file_time_gap), 1)
+                endOfTheFilePeriod = datetime(dateTime.year, dateTime.month+len(self.dataset_file_time_gap), 1, tzinfo=timezone.utc)
         return beginOfTheFilePeriod, endOfTheFilePeriod
 
     def _define_search_criteria(self, beginOfTheFilePeriod=None, endOfTheFilePeriod=None, dateTime=None, size='allSize', **para):
@@ -652,6 +651,26 @@ class Dataset:
 
         return filePaths
 
+    def _get_online_file(self, fileURL):
+        o = urlparse(fileURL)
+        filePathInDatabase = os.path.join(*o.path.split('/')[2:])
+        existingFilePath = ''
+        try:
+            existingFilePath = self.database._get_file_path(filePathInDatabase)
+        except FileNotFoundError:
+            try:
+                existingFilePath = self.databaseBak._get_file_path(filePathInDatabase)
+            except FileNotFoundError: pass
+        if existingFilePath:
+            return existingFilePath
+        else: # download the online file
+            destFilePath = os.path.join(self.database.path, filePathInDatabase)
+            os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+            logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
+            urlretrieve(fileURL, destFilePath)
+            logging.info('downloaded')
+            return destFilePath
+
 
     def get_online_files(self, datetimeRange, **para):
         cdaswsObj = cdasws.CdasWs()
@@ -668,31 +687,11 @@ class Dataset:
                     if all(string in file_['Name'] for string in strings):
                         file = file_
                         break
-                fileURL = file['Name']
-                o = urlparse(fileURL)
-                filePathInDatabase = os.path.join(*o.path.split('/')[3:])
-                destFilePath = os.path.join(self.dataPath, filePathInDatabase)
-                os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-                logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
-                urlretrieve(fileURL, destFilePath)
-                logging.info('downloaded')
-                return [destFilePath]
+                return [self._get_online_file(file['Name'])]
             else:
                 downloadedFiles = []
                 for file in files:
-                    fileURL = file['Name']
-                    o = urlparse(fileURL)
-                    filePathInDatabase = os.path.join(*o.path.split('/')[2:])
-                    if self.database._check_exist_file(filePathInDatabase):
-                        continue
-                    elif self.databaseBak._check_exist_file(filePathInDatabase):
-                        continue
-                    destFilePath = os.path.join(self.database.path, filePathInDatabase)
-                    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-                    logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
-                    urlretrieve(fileURL, destFilePath)
-                    logging.info('downloaded')
-                    downloadedFiles.append(destFilePath)
+                    downloadedFiles.append(self._get_online_file(file['Name']))
                 return downloadedFiles
         except TypeError:
             pass
@@ -1092,7 +1091,7 @@ def findFileNames(path, strings=None, size='allSize', timeTag=None, ext='.cdf', 
                                         hour = int(item[8:10])
                                         minute = int(item[10:12])
                                         second = int(item[12:14])
-                                        timeOfFile = datetime(year, month, day, hour, minute, second)
+                                        timeOfFile = datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
                                         deltaTime_ = timeTag - timeOfFile
                                         if deltaTime_ > timedelta(seconds=1):
                                             if deltaTime_ < deltaTime:
@@ -1442,7 +1441,7 @@ def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', se
                     dayOfYear, timeInfo = dayInfo.split('T')
                     hour, minute, secondInfo = timeInfo.split(':')
                     second, millisecond = secondInfo.split('.')
-                    dataArray[entryInd] = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), 1, 1, int(hour), int(minute), int(second), int(millisecond)*1000) + timedelta(days=int(dayOfYear)-1)))
+                    dataArray[entryInd] = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), 1, 1, int(hour), int(minute), int(second), int(millisecond)*1000, tzinfo=timezone.utc) + timedelta(days=int(dayOfYear)-1)))
             else:
                 dataArray = np.array(dataList)
             objectDict['data'] = dataArray
@@ -1491,7 +1490,7 @@ def ascii_date_time_ymd_utc2epoch(datetimeStr=None):
     year, month, day = yearmmdd.split('-')
     hour, minute, secondInfo = hhmmss.split(':')
     second, millisecond = secondInfo.split('.')
-    epoch = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(millisecond)*1000)))
+    epoch = cdflib.cdfepoch.compute_epoch(ot.datetime2list(datetime(int(year), int(month), int(day), int(hour), int(minute), int(second), int(millisecond)*1000, tzinfo=timezone.utc)))
     return epoch
 
 
