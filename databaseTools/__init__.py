@@ -637,7 +637,7 @@ class FileDownloadCommander:
             worker.start()
             self.workers.append(worker)
 
-    def stopWorkers(self, i):
+    def stopWorkers(self):
         for worker in self.workers:
             worker.stop()
             worker.join()
@@ -674,11 +674,6 @@ class FileDownloader(StoppableThread):
         self.protocol = protocol
         super().__init__(target=self.process, daemon=True)
 
-    def callback(self, cont):
-        fInd, f = self.fInfo.get()
-        f.write(cont)
-        self.fInfo.put((fInd, f))
-
     def process(self):
         if self.protocol == 'ftp':
             logging.info('connecting ftp server at {}'.format(self.host))
@@ -693,8 +688,6 @@ class FileDownloader(StoppableThread):
             try:
                 downloadStart = datetime.now()
                 with open(dstName, 'wb') as f:
-                    self.fInd += 1
-                    self.fInfo.put((self.fInd, f))
                     if self.protocol == 'ftp':
                         logging.info('downloading {} from {}'.format(dstName, srcName))
                         self.ftp.retrbinary('RETR '+srcName, self.callback, blocksize=self.blocksize)
@@ -705,14 +698,8 @@ class FileDownloader(StoppableThread):
 #                        resp = http.request("GET", url_, preload_content=False, timeout=urllib3.util.Timeout(self.timeout))
                             logging.info('downloading {} from {}'.format(dstName, url_))
                             for chunk in resp.stream(self.blocksize):
-                                self.callback(chunk)
-#                            try:
-#                                self.callback(chunk)
-#                            except Exception as e:
-#                                resp.close()
-#                                raise e
+                                f.write(chunk)
                             resp.release_conn()
-                    fInd, f = self.fInfo.get()
                     del f
             except KeyboardInterrupt:
                 self._handle_exception_during_downloading(f)
