@@ -320,10 +320,19 @@ class Database:
                 self.additional_datasets_info = json.load(f)
 
     def _check_exist_file(self, filename):
+        try:
+            _ = self._get_file_path(filename)
+            return True
+        except FileNotFoundError:
+            return False
+
+    def _get_file_path(self, filename):
         for path in self.paths:
-            if os.path.exists(os.path.join(path, filename)):
-                return True
-        return False
+            file_path = os.path.join(path, filename)
+            if os.path.exists(file_path):
+                return file_path
+        raise FileNotFoundError
+
 
 class CDAWebHTMLParser(HTMLParser):
     def __init__(self):
