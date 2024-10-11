@@ -46,7 +46,9 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     except: enable = True
     if enable:
         if gap_threshold is None:
-            gap_threshold = 5*np.min(tdiff)
+#            gap_threshold = 5*np.min(tdiff)
+            values, counts = np.unique(tdiff, return_counts=True)
+            gap_threshold = 5*values[np.argmax(counts)]
         break_points = np.nonzero(tdiff > gap_threshold)[0] + 1
         break_points = np.insert(break_points, 0, 0)
         break_points = np.append(break_points, len(x))
@@ -63,7 +65,6 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
         plot_ = self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
         self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
         return plot_
-
 mpl.axes.Axes.plot_time_series = plot_time_series
 
 
@@ -93,52 +94,65 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     return ax
 
 
-def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None, color='k'):
+def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None, color='k', coordinates='fig'):
+    '''
+    Parameters:
+        coordinates: if "fig", the internal coordinate system for the plotted vertical lines is figure coordinate. In zoomming in using the interactive tool, the vertical lines will remain where they were. If "ax", the internal coordinate system is ax, in which case to make sure the newly added vertical lines will not change the value of ax.get_ylim(), the ylim will be fixed here. Therefore if "ax" is to be used, put this function at the end of the program.
+    '''
     if isinstance(notations, str):
         if notations == 'alphabetical':
             notations = [chr(notation) for notation in np.arange(0, len(epochs)) + ord('a')]
         elif notations == 'numerical':
             notations = [str(ind) for ind in range(1, len(epochs)+1)]
 
-    figInv = fig.transFigure.inverted()
-    for ind, epoch_ in enumerate(epochs):
-        p1 = figInv.transform(axes[0].transData.transform(np.array([epoch_, axes[0].get_ylim()[1]])))
-        p2 = figInv.transform(axes[-1].transData.transform(np.array([epoch_, axes[-1].get_ylim()[0]])))
-        points = np.stack([p1, p2])
-        fig.add_artist(mpl.lines.Line2D(*points.T, color=color, ls='--', lw=1.5))
-        if notations is None:
-            pass
-        elif isinstance(notations, list):
+    if coordinates == 'fig':
+        figInv = fig.transFigure.inverted()
+        for ind, epoch_ in enumerate(epochs):
+            p1 = figInv.transform(axes[0].transData.transform(np.array([epoch_, axes[0].get_ylim()[1]])))
+            p2 = figInv.transform(axes[-1].transData.transform(np.array([epoch_, axes[-1].get_ylim()[0]])))
+            points = np.stack([p1, p2])
+            fig.add_artist(mpl.lines.Line2D(*points.T, color=color, ls='--', lw=1.5))
+    elif coordinates == 'ax':
+        for ax in axes:
+            ylim = ax.get_ylim()
+            for ind, epoch_ in enumerate(epochs):
+                ax.plot(np.repeat(epoch_, 2), ylim, color=color, ls='--', lw=1.5)
+            ax.set_ylim(ylim)
+    if notations is None:
+        pass
+    elif isinstance(notations, list):
+        for ind, epoch_ in enumerate(epochs):
             notation = notations[ind]
-            # the following code needs to be corrected
-#            fig.text(x=p1[0], y=p1[1]+0.01, s=notation, transform=axes[0].transData, horizontalalignment='center', verticalalignment='top')
             axes[0].text(x=epoch_, y=axes[0].get_ylim()[1], s=notation, transform=axes[0].transData, horizontalalignment='center', verticalalignment='bottom')
 
 
-def plotSphericalCoordinatesOfVectorTimeSeries(ax, t , data):
+def plotSphericalCoordinatesOfVectorTimeSeries(ax, t , data, **para):
     '''
     Parameters:
         t: time
         data: time series of vector data in Cartesian coordinates, such as magnetic field vector array of shape [numberOfEpochs, 3]
     '''
+    try:
+        subscript = '_' + para.pop('subscript')
+    except: subscript = ''
     B = data
     BSpherical = dat.cartesian2spherical(B)/np.pi*180
-    plotTheta, = ax.plot(t, BSpherical[:, 1], color='k', ls='-')
-    ax.set_ylabel('$\\theta$')
+    _ = ax.plot_time_series(t, BSpherical[:, 1], color='k', ls='-', **para)
+    ax.set_ylabel('$\\theta{}$ [deg]'.format(subscript))
     ax.set_ylim([0, 180])
     ax.set_yticks([0, 90, 180])
 
     axTwin = ax.twinx()
     #dat = reload(dat)
-    plotPhi = plotTimeSeriesOfAngle(axTwin, t, BSpherical[:, 2], color='b', ls='-', label='$\\phi$')
+    plotPhi = plotTimeSeriesOfAngle(axTwin, t, BSpherical[:, 2], color='b', ls='-', label='$\\phi$', **para)
     #plotPhi, = axTwin.plot(t, vSpherical[:, 2], color='b', ls='-', label='$\\phi$')
     axTwin.spines["right"].set_color("b")
-    axTwin.set_ylabel('$\\phi$')
+    axTwin.set_ylabel('$\\phi{}$ [deg]'.format(subscript))
     axTwin.set_ylim([0, 360])
     axTwin.set_yticks([0, 90, 180, 270, 360])
     axTwin.tick_params(which='both', direction='in')
-    axTwin.yaxis.label.set_color(plotPhi.get_color())
-    axTwin.tick_params(axis='y', colors=plotPhi.get_color())
+    axTwin.yaxis.label.set_color(plotPhi[0][0].get_color())
+    axTwin.tick_params(axis='y', colors=plotPhi[0][0].get_color())
     axTwin.grid(True)
 
 ## <<<< plot time format
@@ -193,6 +207,22 @@ def format_doyThour(t, pos=None):
     epochs = dat.Epochs(CDF_EPOCH=t)
     return epochs.get_data('datetime').strftime('%jT%H')
 
+def format_show_min_TT2000(t, pos=None):
+    '''e.g. 30^\mathrm{m}'''
+    return '$' + cdflib.cdfepoch.encode(int(t))[14:16] + '^\mathrm{m}$'
+
+def format_show_hour_min_TT2000(t, pos=None):
+    '''e.g. 13^\mathrm{h}30^\mathrm{m}'''
+    return '$' + cdflib.cdfepoch.encode(int(t))[11:13] + '^\mathrm{h}'+ cdflib.cdfepoch.encode(int(t))[14:16] + '^\mathrm{m}$'
+
+def format_show_min_sec_TT2000(t, pos=None):
+    '''e.g. 30^\mathrm{m}42^\mathrm{s}'''
+    return '$' + cdflib.cdfepoch.encode(int(t))[14:16] + '^\mathrm{m}$' +'$' + cdflib.cdfepoch.encode(int(t))[17:19] + '^\mathrm{s}$'
+
+
+showMinFormatterTT2000 = FuncFormatter(format_show_min_TT2000)
+showHourMinFormatterTT2000 = FuncFormatter(format_show_hour_min_TT2000)
+showMinSecFormatterTT2000 = FuncFormatter(format_show_min_sec_TT2000)
 monthFormatter = FuncFormatter(format_month)
 monthFormatterTT2000 = FuncFormatter(format_monthTT2000)
 dayFormatter = FuncFormatter(format_day)
@@ -234,14 +264,6 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
             downArgs, = np.nonzero(deltaAngle >= 180)
             logging.debug("current up intersection:")
             logging.debug(cdflib.cdfepoch.breakdown(t[0]))
-            tOfInterest = dat.Epoch(dateTime=dt.datetime(2002, 2, 9, 0, 34, 0)).epoch
-            if np.abs(tOfInterest - t[0]) < 5000:
-                logging.debug('current block:')
-                logging.debug(cdflib.cdfepoch.breakdown(dataUpBlock[:, -1]))
-                logging.debug('angle:')
-                logging.debug(dataUpBlock[:, 0])
-                logging.debug('down args:')
-                logging.debug(downArgs)
             if len(downArgs) > 0:
                 downAngleStart = angle[downArgs]
                 downAngleEnd = angle[downArgs+1] - 360
@@ -255,18 +277,13 @@ def plotTimeSeriesOfAngle(ax, t, angle, **para):
                         dataDownBlock = np.append(dataDownBlock, np.array([0, tDownIntersection[downBlockInd]])[None, :], axis=0)
                     if downBlockInd > 0:
                         dataDownBlock = np.insert(dataDownBlock, 0, np.array([360, tDownIntersection[downBlockInd-1]])[None, :], axis=0)
-                    if np.abs(tOfInterest - t[0]) < 5000:
-                        logging.debug('current down block:')
-                        logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[:, -1]))
-                        logging.debug('angle:')
-                        logging.debug(dataDownBlock[:, 0])
                     logging.debug("current down intersection:")
                     logging.debug(cdflib.cdfepoch.breakdown(dataDownBlock[0, -1]))
-                    plot_, = ax.plot(dataDownBlock[:, -1], dataDownBlock[:, 0], **para)
+                    plot_ = ax.plot_time_series(dataDownBlock[:, -1], dataDownBlock[:, 0], **para)
             else:
-                plot_, = ax.plot(dataUpBlock[:, -1], dataUpBlock[:, 0], **para)
+                plot_ = ax.plot_time_series(dataUpBlock[:, -1], dataUpBlock[:, 0], **para)
     else:
-        plot_, = ax.plot(t, angle, **para)
+        plot_ = ax.plot_time_series(t, angle, **para)
     return plot_
 
 
@@ -352,11 +369,12 @@ def plotMultiplePhaseSpaceDensity(epochStart, t, f, theta, phi, energyTable, dat
     return fig
 
 
-def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None, vPhiTable=None, phasePointsSpherical=None, integration=None, integrationStepsN=200, vPlotRange=None, vmin=None, vmax=None, fig=None, cax_width=0.02, gridPointsNumber=200):
+def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None, vPhiTable=None, phasePointsSpherical=None, integration=None, integrationStepsN=200, vPlotRange=None, vmin=None, vmax=None, fig=None, cax_width=0.02, gridPointsNumber=200, levels_max=None, levels_N=None, level_values=None):
     '''
     Purpose:
     Parameters:
         integration: if None, plot a cut of phase space density. Otherwise, it should be a character, <'x', 'y', 'z'>, which represents a dimension to be integrated out.
+        levels_max, levels_N, level_values: provide only one of them specifying the levels. levels_max (int) will finds up to a max number of intervals with ticks at nice locations. levels_N (int) specify the exact number of levels evenly logarithmically distributed. level_values (array) specify the exact levels.
     '''
     interp = interpolatePhaseSpaceDensity(phaseSpaceDensity, vTable=vTable, vThetaTable=vThetaTable, vPhiTable=vPhiTable, phasePointsSpherical=phasePointsSpherical)
     if vTable is not None:
@@ -367,16 +385,24 @@ def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None
     if vPlotRange is None:
         vPlotRange = vRange
     vPlotGrid = np.linspace(*vPlotRange, 100)
-    vGrid = np.meshgrid(vPlotGrid, vPlotGrid, indexing='ij')
-    vzGrid = np.zeros_like(vGrid[0])
+    vGrid = np.meshgrid(vPlotGrid, vPlotGrid, indexing='ij') # coordinates grid
+    integrationGrid = np.zeros_like(vGrid[0])
     if integration is None:
-        phaseSDInterp = interp(*vGrid, vzGrid).astype(np.float64)
+        phaseSDInterp = interp(*vGrid, integrationGrid).astype(np.float64)
         ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
     else:
-        if integration == 'z':
-            vGridAllIntegration = [np.repeat(grid[..., None], integrationStepsN, axis=-1) for grid in vGrid]
-            vzGridAllIntegration = vzGrid[..., None] + np.linspace(*vRange, integrationStepsN)
-            phaseSDInterp = np.sum(interp(*vGridAllIntegration, vzGridAllIntegration).astype(np.float64) * np.diff(vRange)/integrationStepsN, axis=-1)
+        integration_code = {'x': 1, 'y': 2, 'z': 3}
+        if isinstance(integration, str):
+            integration = integration_code[integration]
+        vGridAllIntegration = [np.repeat(np.expand_dims(grid, axis=integration-1), integrationStepsN, axis=integration-1) for grid in vGrid]
+        integrationGridAllIntegration = np.expand_dims(integrationGrid, axis=integration-1) + np.swapaxes(np.linspace(*vRange, integrationStepsN)[:, None, None], 0, integration-1)
+        interpolation_grid = []
+        for axis in range(1, 4):
+            if integration == axis:
+                interpolation_grid.append(integrationGridAllIntegration)
+            else:
+                interpolation_grid.append(vGridAllIntegration.pop(0))
+        phaseSDInterp = np.sum(interp(*interpolation_grid).astype(np.float64) * np.diff(vRange)/integrationStepsN, axis=integration-1)
 #    pcm_ = ax.pcolormesh(*vGrid, np.log10(phaseSDInterp), shading='auto')
     data = phaseSDInterp
     fUni = np.unique(data)
@@ -385,7 +411,20 @@ def plotPhaseSpaceDensity2D(ax, phaseSpaceDensity, vTable=None, vThetaTable=None
     if vmax is None:
         vmax = data.max()
 #    pcm_ = ax.pcolormesh(*vGrid, phaseSDInterp, norm=mpl.colors.LogNorm(vmin=vmin, vmax=data.max()), shading='auto')
-    pcm_ = ax.pcolormesh(*vGrid, phaseSDInterp, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), shading='auto', cmap='viridis')
+#    pcm_ = ax.pcolormesh(*vGrid, phaseSDInterp, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), shading='auto', cmap='viridis')
+    provided_level_option_count = 0
+    for level_option in [levels_max, levels_N, level_values]:
+        if level_option is None: pass
+        else: provided_level_option_count +=1
+    assert provided_level_option_count == 1
+    if levels_max is not None:
+        levels = levels_max
+    elif levels_N is not None:
+        levels = (vmax/vmin)**(np.arange(levels_N+1)/levels_N) * vmin
+    elif level_values is not None:
+        levels = level_values
+    pcm_ = ax.contour(*vGrid, phaseSDInterp, levels=levels, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), colors='k')
+    pcm_ = ax.contourf(*vGrid, phaseSDInterp, levels=levels, norm=mpl.colors.LogNorm(vmin=vmin, vmax=vmax), cmap='viridis')
     if fig is not None:
         cax_gap = cax_width / 3
         ax_pos = ax.get_position()
@@ -526,7 +565,7 @@ def plot_PSD_spectrogram_from_partial_numberdensity(fig, ax, epochs, energy_tabl
 #    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     ax.set_ylabel('E [eV]')
 
-def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02):
+def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02, ylabel='Energy', cbar_label='DEF'):
     '''
     this function work for mms fpi moms, mms1_dis_energyspectr_omni_fast
 
@@ -549,5 +588,106 @@ def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, e
     cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
     cax = fig.add_axes(cax_pos)
 #    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'DEF [$\mathrm{keV}/(\mathrm{cm}^2\cdot\mathrm{s}\cdot\mathrm{sr}\cdot\mathrm{keV})$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
-    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=r'DEF', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
-    ax.set_ylabel('energy [eV]')
+    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=cbar_label, ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
+    ax.set_ylabel(ylabel)
+
+## additional information
+def add_indices_to_axes(axes, notations='alphabetical', pos=(0.05, 0.97)):
+    if isinstance(notations, str):
+        if notations == 'alphabetical':
+            notations = [chr(notation) for notation in np.arange(0, len(axes)) + ord('a')]
+        elif notations == 'numerical':
+            notations = [str(ind) for ind in range(1, len(axes)+1)]
+
+    for ax, notation in zip(axes, notations):
+        ax.text(*pos, s=notation, transform=ax.transAxes, va='top', ha='left')
+
+def add_summary_brackets_to_axes(fig, axes, text, gap_between_bracket_and_axes):
+    figInv = fig.transFigure.inverted()
+    bracket_width = 2*plt.rcParams['font.size'] # in display unit
+    gap_between_text_and_bracket = 0.5*plt.rcParams['font.size']
+
+    p1 = figInv.transform(axes[0].transAxes.transform(np.array([0, 1]))) - np.array([gap_between_bracket_and_axes, 0])
+    p2 = p1 - figInv.transform(np.array([bracket_width, 0]))
+    p4 = figInv.transform(axes[-1].transAxes.transform(np.array([0, 0]))) - np.array([gap_between_bracket_and_axes, 0])
+    p3 = p4 - figInv.transform(np.array([bracket_width, 0]))
+    points = np.stack([p1, p2, p3, p4])
+    fig.add_artist(mpl.lines.Line2D(*points.T, color='k', ls='-'))
+    text_pos = (p2 + p3)/2
+    fig.text(x=text_pos[0] - figInv.transform(np.array([gap_between_text_and_bracket, 0]))[0], y=text_pos[1], s=text, transform=fig.transFigure, horizontalalignment='right', verticalalignment='center')
+
+
+def find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap):
+    '''
+    Parameters:
+        round_gap: timedelta object specifying the distance between two major ticks
+
+    '''
+    start_ = dat.datetime_ceil(datetimeRange[0], round_gap=round_gap)
+    xTicks = []
+    while datetimeRange[1] > start_:
+        xTicks.append(dat.Epochs(datetime=start_).get_data('CDF_TIME_TT2000')[0])
+        start_ += round_gap
+    return xTicks
+
+def set_CDF_TIME_TT2000_xticks(self, round_gap):
+    xlim = self.get_xlim()
+    datetimeRange = dat.Epochs(CDF_TIME_TT2000=xlim).get_data('datetime')
+    xTicks = find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap)
+    self.set_xticks(xTicks)
+mpl.axes.Axes.set_CDF_TIME_TT2000_xticks = set_CDF_TIME_TT2000_xticks
+
+def rainbow_text_interactive(x, y, strings, colors, orientation='horizontal', ax=None, **kwargs):
+    """
+    This function only works for interactive backend.
+    Take a list of *strings* and *colors* and place them next to each
+    other, with text strings[i] being shown in colors[i].
+
+    Parameters
+    ----------
+    x, y : float
+        Text position in data coordinates.
+    strings : list of str
+        The strings to draw.
+    colors : list of color
+        The colors to use.
+    orientation : {'horizontal', 'vertical'}
+    ax : Axes, optional
+        The Axes to draw into. If None, the current axes will be used.
+    **kwargs
+        All other keyword arguments are passed to plt.text(), so you can
+        set the font size, family, etc.
+    """
+    if ax is None:
+        ax = plt.gca()
+    t = ax.transData
+    canvas = ax.figure.canvas
+
+    assert orientation in ['horizontal', 'vertical']
+    if orientation == 'vertical':
+        kwargs.update(rotation=90, verticalalignment='bottom')
+
+    for s, c in zip(strings, colors):
+        text = ax.text(x, y, s, color=c, transform=t, **kwargs)
+
+        # Need to draw to update the text position.
+        text.draw(canvas.get_renderer())
+        ex = text.get_window_extent()
+        if orientation == 'horizontal':
+            t = mpl.transforms.offset_copy(text.get_transform(), x=ex.width, units='dots')
+        else:
+            t = mpl.transforms.offset_copy(text.get_transform(), y=ex.height, units='dots')
+
+def rainbow_text_output(x, y, strings, colors, orientation='horizontal', ax=None, **kwargs):
+    ha = kwargs.get('ha', 'left')
+    if ha == 'left':
+        text = ax.text(x, y, strings[0], color=colors[0], **kwargs)
+        # Subsequent words, positioned with annotate(), relative to the preceding one.
+        for s, c in zip(strings[1:], colors[1:]):
+            text = ax.annotate(s, xycoords=text, xy=(1, 0), verticalalignment="bottom", color=c)  # custom properties
+    elif ha == 'right':
+        text = ax.text(x, y, strings[-1], color=colors[-1], **kwargs)
+        # Subsequent words, positioned with annotate(), relative to the preceding one.
+        for s, c in zip(strings[-2::-1], colors[-2::-1]):
+            text = ax.annotate(s, xycoords=text, xy=(0, 0), verticalalignment="bottom", ha=ha, color=c)  # custom properties
+

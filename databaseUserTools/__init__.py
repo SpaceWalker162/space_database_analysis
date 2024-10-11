@@ -682,17 +682,18 @@ class Dataset:
             file = None
             search_criteria = para.get('search_criteria')
             if search_criteria:
-                for file_ in files:
+                logging.debug('search online files with string criteria: {}'.format(search_criteria['strings']))
+                downloadedFiles = []
+                for file in files:
                     strings = search_criteria['strings']
-                    if all(string in file_['Name'] for string in strings):
-                        file = file_
-                        break
-                return [self._get_online_file(file['Name'])]
+                    if all(string in file['Name'] for string in strings):
+                        downloadedFiles.append(self._get_online_file(file['Name']))
+#                        return [self._get_online_file(file['Name'])]
             else:
                 downloadedFiles = []
                 for file in files:
                     downloadedFiles.append(self._get_online_file(file['Name']))
-                return downloadedFiles
+            return downloadedFiles
         except TypeError:
             pass
 
@@ -981,7 +982,7 @@ def getTimeFromName(name):
     '''
     timeString = name.split('_')[-2]
     fmt = "%Y%m%d%H%M%S"
-    return datetime.strptime(timeString, fmt)
+    return datetime.strptime(timeString, fmt).replace(tzinfo=timezone.utc)
 
 def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, strings=None, size='allSize', ext='.cdf', **para):
     '''

@@ -680,7 +680,7 @@ class Epochs:
         epochs: a ndarray
     '''
 
-    def __init__(self, datetime=None, CDF_EPOCH=None, CDF_TIME_TT2000=None, standard_fm='astropy_Time'):
+    def __init__(self, datetime=None, CDF_EPOCH=None, CDF_TIME_TT2000=None, astropy_Time=None, standard_fm='astropy_Time'):
         '''
         Parameters:
             datetime: a list nested to any degree of depth whose final element is datetime object. Input either this parameter or epochs to initialize the instance. This format refers to datetime.datetime
@@ -699,17 +699,22 @@ class Epochs:
                 CDF_EPOCH = CDF_EPOCH[..., None]
         self.data['CDF_EPOCH'] = CDF_EPOCH
         if CDF_TIME_TT2000 is not None:
+            CDF_TIME_TT2000 = np.array(CDF_TIME_TT2000)
             if len(CDF_TIME_TT2000.shape) == 0:
                 CDF_TIME_TT2000 = CDF_TIME_TT2000[..., None]
-            CDF_TIME_TT2000 = np.array(CDF_TIME_TT2000)
         self.data['CDF_TIME_TT2000'] = CDF_TIME_TT2000
+        self.data['astropy_Time'] = astropy_Time
         for data_format, data in self.data.items():
             if data is not None:
-                if self.standard_fm == 'CDF_TIME_TT2000_components':
+                if self.standard_fm == 'CDF_TIME_TT2000_components': # this option is deprecated
                     components = Epochs.breakdown(data=data, fm=data_format)
                     self.standard_data = components
                 elif self.standard_fm == 'astropy_Time':
-                    self.standard_data = Epochs.convert_to_standard_data(data, fm=data_format)
+                    if self.standard_fm == data_format:
+                        self.standard_data = self.data['astropy_Time']
+                    else:
+
+                        self.standard_data = Epochs.convert_to_standard_data(data, fm=data_format)
                 break
 
 #        datetime2epochWithEpochType = functools.partial(datetime2epoch, epochType=epochType)
@@ -974,8 +979,12 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
 def linear_interpolate_array(x, xp, array, axis=0):
     '''
     Parameters:
+        x: the new x coordinates after interpolation
+        xp: the x coordinate of array along axis=axis
         axis: the axis of the array for coordinate x 
     '''
+    if len(array.shape) == 1:
+        return np.interp(x, xp, array)
     assert len(xp) == array.shape[axis]
     if axis != 0:
         array = array.swapaxes(axis, 0)
@@ -1736,12 +1745,13 @@ def quaternionMultiply(qs, scalarPos='last'):
     else: raise Exception
 
 def rotateVectorUsingQuaternion(vec, quat, scalarPos='last'):
-    quat_inverse = np.copy(quat)
-    quat_inverse[..., :3] *= -1
-    vec_quat = np.zeros((*vec.shape[:-1], 4))
-    vec_quat[..., :3] = vec
-    new_vec = quaternionMultiply([quat, vec_quat, quat_inverse])
-    return new_vec
+    if scalarPos == 'last':
+        quat_inverse = np.copy(quat)
+        quat_inverse[..., :3] *= -1
+        vec_quat = np.zeros((*vec.shape[:-1], 4))
+        vec_quat[..., :3] = vec
+        new_vec = quaternionMultiply([quat, vec_quat, quat_inverse])
+    return new_vec[..., :3]
 
 
 def mask_dict_of_ndarray(dic, mask, copy=False):
@@ -1826,3 +1836,20 @@ def CalculateDynamicPressure(n, v, spacecraft='mms'):
     speed = np.linalg.norm(v, axis=-1)
     dynamicPressure = 1.67 * 10**(-6) * n * speed**2 # nPa
     return dynamicPressure
+
+def datetime_floor(t, round_gap=None):
+    '''
+    Purpose: find the floor of a time in a day
+    Parameters:
+        round_gap: timedelta object
+    '''
+    day_start = dt.datetime(t.year, t.month, t.day, tzinfo=t.tzinfo)
+    return day_start + dt.timedelta(seconds=(t - day_start).total_seconds()//round_gap.total_seconds() * round_gap.total_seconds())
+
+def datetime_ceil(t, round_gap=None):
+    '''
+    Purpose: find the ceil of a time in a day
+    Parameters:
+        round_gap: timedelta object
+    '''
+    return datetime_floor(t, round_gap=round_gap) + round_gap
