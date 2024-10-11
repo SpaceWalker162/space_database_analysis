@@ -608,23 +608,25 @@ class FileDownloadCommander:
         self.processedWorks = queue.Queue()
         self.failedWorks = queue.Queue()
         self.addWorkers()
+        self.consecutiveFailure = 0
         while self.pendingWorks.qsize() > 0:
             work, status, t_ = self.processedWorks.get()
             self.processedN += 1
             if status == 'failed':
+                self.consecutiveFailure += 1
                 self.failedTries.append(t_)
                 self.failedWorks.put(work)
                 self.reportProgress()
                 if self.pendingWorks.qsize() > 0:
                     numberOfFailedTriesToPauseAWhile = 5
-                    if len(self.failedTries) > numberOfFailedTriesToPauseAWhile:
-                        if self.failedTries[-1] - self.failedTries[-numberOfFailedTriesToPauseAWhile] < timedelta(minutes=numberOfFailedTriesToPauseAWhile):
-                            time_to_sleep = 60*20
-                            self.stopWorkers()
-                            logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, next try will begain after {time_to_sleep} seconds.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile, time_to_sleep=time_to_sleep))
-                            time.sleep(time_to_sleep)
-                            self.addWorkers()
+                    if self.consecutiveFailure >= numberOfFailedTriesToPauseAWhile:
+                        time_to_sleep = 60*20
+                        self.stopWorkers()
+                        logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, next try will begain after {time_to_sleep} seconds.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile, time_to_sleep=time_to_sleep))
+                        time.sleep(time_to_sleep)
+                        self.addWorkers()
             elif status == 'finished':
+                self.consecutiveFailure = 0
                 self.reportProgress()
 
         if self.keepDownloading and self.failedWorks.qsize() > 0:
@@ -720,6 +722,7 @@ class FileDownloader(StoppableThread):
 
     def _handle_exception_during_downloading(self, f):
         self.processedWorks.put((self.currentWork, 'failed', datetime.now()))
+        logging.warning('{} failed at {}'.format(self.currentWork[0], datetime.now()))
         if hasattr(self, 'ftp'):
             self.ftp.abort()
             self.ftp.quit()
