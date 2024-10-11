@@ -1014,12 +1014,12 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
             lgMess = client.login()
             logging.info(lgMess)
             client.cwd(commonPath)
-        func = functools.partial(func_base, client=client, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+        func = functools.partial(func_base, client=client, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle, protocol=protocol)
     elif protocol == 'http':
         if client is None:
             client = HTTP(host=host)
             client.cwd(commonPath)
-        func = functools.partial(func_base, client=client, facts=facts, verbose=verbose, logFileDir=logFileDir, logFileHandle=logFileHandle)
+        func = functools.partial(func_base, client=client, facts=facts, verbose=verbose, logFileDir=logFileDir, logFileHandle=logFileHandle, protocol=protocol)
     logging.debug('client defined according to protocol {}'.format(protocol))
 
     if isinstance(path, str): # this is the main branch
