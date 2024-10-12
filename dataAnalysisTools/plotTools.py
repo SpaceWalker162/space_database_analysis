@@ -44,6 +44,8 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     try:
         enable = kwargs.pop('enable')
     except: enable = True
+    y_major = mpl.ticker.MaxNLocator(nbins=4, min_n_ticks=3)
+    self.yaxis.set_major_locator(y_major)
     if enable:
         if gap_threshold is None:
 #            gap_threshold = 5*np.min(tdiff)
@@ -59,11 +61,11 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
             y_ = y[s_]
             plot_ = self.plot(x_, y_, scalex=scalex, scaley=scaley, data=data, **kwargs)
             plots_.append(plot_)
-        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+#        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
         return plots_
     else:
         plot_ = self.plot(*args, scalex=scalex, scaley=scaley, data=data, **kwargs)
-        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
+#        self.xaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
         return plot_
 mpl.axes.Axes.plot_time_series = plot_time_series
 
@@ -616,6 +618,13 @@ def add_summary_brackets_to_axes(fig, axes, text, gap_between_bracket_and_axes):
     text_pos = (p2 + p3)/2
     fig.text(x=text_pos[0] - figInv.transform(np.array([gap_between_text_and_bracket, 0]))[0], y=text_pos[1], s=text, transform=fig.transFigure, horizontalalignment='right', verticalalignment='center')
 
+def find_best_round_gap_for_time_ticks(datetimeRange, ticks_N=6):
+    possible_gaps_seconds = np.array([1, 2, 6, 10, 20, 30, 40])
+    possible_gaps_minutes_in_seconds = possible_gaps_seconds * 60
+    possible_gaps_hours_in_seconds = np.array([1, 2, 5, 6, 10, 12]) * 60 * 60
+    possible_gaps = np.concatenate((possible_gaps_seconds, possible_gaps_minutes_in_seconds, possible_gaps_hours_in_seconds))
+    round_gap_seconds = possible_gaps[np.argmin(np.abs(possible_gaps - (datetimeRange[1] - datetimeRange[0]).total_seconds()/ticks_N))]
+    return dt.timedelta(seconds=int(round_gap_seconds))
 
 def find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap):
     '''
@@ -630,9 +639,11 @@ def find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap):
         start_ += round_gap
     return xTicks
 
-def set_CDF_TIME_TT2000_xticks(self, round_gap):
+def set_CDF_TIME_TT2000_xticks(self, round_gap=None, ticks_N=6):
     xlim = self.get_xlim()
     datetimeRange = dat.Epochs(CDF_TIME_TT2000=xlim).get_data('datetime')
+    if round_gap is None:
+        round_gap = find_best_round_gap_for_time_ticks(datetimeRange, ticks_N=ticks_N)
     xTicks = find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap)
     self.set_xticks(xTicks)
 mpl.axes.Axes.set_CDF_TIME_TT2000_xticks = set_CDF_TIME_TT2000_xticks
