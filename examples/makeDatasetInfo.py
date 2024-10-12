@@ -32,7 +32,7 @@ if __name__ == '__main__':
         dataset.update({'dataset_path': dataset_path})
         add_dic[datasetID] = dataset
 
-    datasetID = 'MVN_MAG_L2_SUNSTATE-1SEC'
+    datasetID = 'MVN_MAG_L2-SUNSTATE-1SEC'
     dataset = {'Id': datasetID}
     dataset_path = os.path.join('maven', 'mag', 'l2', 'sunstate-1sec', 'cdfs')
     dataset.update({'dataset_path': dataset_path})
