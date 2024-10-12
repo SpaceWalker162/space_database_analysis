@@ -1040,7 +1040,7 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
             objAbsName = str(PurePath(path, objName))
 #            objAbsName = '/'.join([path, objName])
             if objFact['type'] == 'dir':
-                fileInfoDict_ = readFTPHTTPFileInfoRecursively(client=client, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle)
+                fileInfoDict_ = readFTPHTTPFileInfoRecursively(client=client, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle, protocol=protocol)
                 fileInfoDict[objName] = fileInfoDict_
             elif objFact['type'] == 'file':
                 del objFact['type']
@@ -1059,10 +1059,10 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
     elif isinstance(path, list):
         if isinstance(path[0], str):
             path = ot.list2dict([path])
-            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle, protocol=protocol)
         elif isinstance(path[0], list):
             path = ot.list2dict(path)
-            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle)
+            fileInfoDict = readFTPHTTPFileInfoRecursively(client=client, path=path, verbose=verbose, facts=facts, logFileHandle=logFileHandle, protocol=protocol)
     elif isinstance(path, dict):
         fileInfoDict = copy.deepcopy(path)
         _ = ot.doAtLeavesOfADict(fileInfoDict, do=func)
