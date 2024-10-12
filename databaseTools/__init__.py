@@ -612,6 +612,7 @@ class FileDownloadCommander:
         while self.pendingWorks.qsize() > 0:
             work, status, t_ = self.processedWorks.get()
             self.processedN += 1
+            logging.debug('commander: processedN +1, status: {}'.format(status))
             if status == 'failed':
                 self.consecutiveFailure += 1
                 self.failedTries.append(t_)
