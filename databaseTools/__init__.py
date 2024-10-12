@@ -623,7 +623,7 @@ class FileDownloadCommander:
                         time_to_sleep = 60*20
                         logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, stopping workers.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile))
                         self.stopWorkers()
-                        logging.warning('Next try will begain after {time_to_sleep} seconds.'.format(time_to_sleep))
+                        logging.warning('Next try will begain after {time_to_sleep} seconds.'.format(time_to_sleep=time_to_sleep))
                         time.sleep(time_to_sleep)
                         self.addWorkers()
             elif status == 'finished':
