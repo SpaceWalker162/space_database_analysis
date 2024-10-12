@@ -628,6 +628,8 @@ class FileDownloadCommander:
             elif status == 'finished':
                 self.consecutiveFailure = 0
                 self.reportProgress()
+            else:
+                logging.warning('Unknown status of the download')
 
         if self.keepDownloading and self.failedWorks.qsize() > 0:
             self.preparePendingWorks(source='failedWorks')
@@ -642,7 +644,11 @@ class FileDownloadCommander:
     def stopWorkers(self):
         for worker in self.workers:
             worker.stop()
-            worker.join()
+            try:
+                worker.join(timeout=2*self.timeout)
+            except Exception as e:
+                logging.warning('Not able to stop a worker')
+                raise e
         self.workers = []
         stop_time = datetime.now()
         logging.debug('Workers were stopped at {}'.format(stop_time))
@@ -683,7 +689,7 @@ class FileDownloader(StoppableThread):
             lgMess = self.ftp.login()
             logging.info(lgMess)
 
-        while not self.pendingWorks.empty():
+        while not (self.pendingWorks.empty() or self.stopped):
             self.currentWork = self.pendingWorks.get(block=False)
             srcName, dstName = self.currentWork
             logging.debug('a work gotten with source name: {}\nand destination name: {}'.format(srcName, dstName))
