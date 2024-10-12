@@ -40,4 +40,4 @@ if __name__ == '__main__':
 
     database.load_additional_datasets_info()
     database.update_additional_datasets_info(add_dic)
-#    database.save_additinal_datasets_info()
+    database.save_additinal_datasets_info()
