@@ -621,8 +621,9 @@ class FileDownloadCommander:
                     numberOfFailedTriesToPauseAWhile = 5
                     if self.consecutiveFailure >= numberOfFailedTriesToPauseAWhile:
                         time_to_sleep = 60*20
+                        logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, stopping workers.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile))
                         self.stopWorkers()
-                        logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, next try will begain after {time_to_sleep} seconds.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile, time_to_sleep=time_to_sleep))
+                        logging.warning('Next try will begain after {time_to_sleep} seconds.'.format(time_to_sleep))
                         time.sleep(time_to_sleep)
                         self.addWorkers()
             elif status == 'finished':
@@ -653,7 +654,6 @@ class FileDownloadCommander:
         stop_time = datetime.now()
         logging.debug('Workers were stopped at {}'.format(stop_time))
         logging.info('active threads: {}'.format(threading.active_count()))
-
 
 class StoppableThread(threading.Thread):
     def __init__(self, *args, **kwargs):
@@ -689,7 +689,7 @@ class FileDownloader(StoppableThread):
             lgMess = self.ftp.login()
             logging.info(lgMess)
 
-        while not (self.pendingWorks.empty() or self.stopped):
+        while not (self.pendingWorks.empty() or self.stopped()):
             self.currentWork = self.pendingWorks.get(block=False)
             srcName, dstName = self.currentWork
             logging.debug('a work gotten with source name: {}\nand destination name: {}'.format(srcName, dstName))
@@ -736,7 +736,6 @@ class FileDownloader(StoppableThread):
         f.close()
         os.remove(dstName)
         logging.info("File Removed: {}".format(dstName))
-
 
     def get_id(self):
         # returns id of the respective thread
