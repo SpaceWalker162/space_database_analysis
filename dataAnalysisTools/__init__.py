@@ -1833,9 +1833,10 @@ def spectrogram(t, data, nperseg, noverlap, gap_threshold='6*', window='hamming'
 
 
 def CalculateDynamicPressure(n, v, spacecraft='mms'):
-    speed = np.linalg.norm(v, axis=-1)
-    dynamicPressure = 1.67 * 10**(-6) * n * speed**2 # nPa
-    return dynamicPressure
+    if spacecraft in ['mms', 'maven']:
+        speed = np.linalg.norm(v, axis=-1)
+        dynamicPressure = 1.67 * 10**(-6) * n * speed**2 # nPa
+        return dynamicPressure
 
 def datetime_floor(t, round_gap=None):
     '''
