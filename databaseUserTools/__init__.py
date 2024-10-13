@@ -1549,7 +1549,7 @@ def update_datasets_info(databasePath, databaseBakPaths):
     cmdArgs = ['rsync', '--update', filePath, destFilePath]
     process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     process.wait()
-    logging.info('updated')
+    logging.info('dataset info updated')
 
 
 def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
