@@ -632,6 +632,10 @@ class FileDownloadCommander:
                 self.reportProgress()
             else:
                 logging.warning('Unknown status of the download')
+        logging.debug('commander: finished one loop over pending works, with {} failed works'.format(self.failedWorks.qsize()))
+        try:
+            self.stopWorkers()
+        except: pass
 
         if self.keepDownloading and self.failedWorks.qsize() > 0:
             self.preparePendingWorks(source='failedWorks')
