@@ -612,7 +612,7 @@ class FileDownloadCommander:
         while self.pendingWorks.qsize() > 0:
             work, status, t_ = self.processedWorks.get()
             self.processedN += 1
-            logging.debug('commander: processedN +1, status: {}'.format(status))
+            logging.debug('commander: processedN +1, {}\nstatus: {}'.format(work[0], status))
             if status == 'failed':
                 self.consecutiveFailure += 1
                 self.failedTries.append(t_)
@@ -723,8 +723,10 @@ class FileDownloader(StoppableThread):
             speed = fileSizeInM/timeCost.total_seconds()
             logging.info('{} downloaded at {}'.format(dstName, datetime.now()))
             logging.info(" size: {}M, time cost: {}, download speed: {:.3f}M/s" .format(fileSizeInM, timeCost, speed))
-            logging.debug('a work finished')
-            self.processedWorks.put((self.currentWork, 'finished', datetime.now()))
+            logging.debug('worker: a work finished')
+            status = 'finished'
+            self.processedWorks.put((self.currentWork, status, datetime.now()))
+            logging.debug('worker: {} with status {} sent to commander'.format(self.currentWork[0], status))
         logging.debug('worker: not in while loop')
 
     def _handle_exception_during_downloading(self, f):
