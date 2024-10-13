@@ -13,7 +13,7 @@ from urllib.parse import urlparse, urljoin
 from html.parser import HTMLParser
 import time
 import space_database_analysis.otherTools as ot
-from pathlib import PurePath
+from pathlib import PurePath, PurePosixPath
 import copy
 import ast
 import re
@@ -370,14 +370,14 @@ class HTTP(urllib3.PoolManager):
     def __init__(self, *argt, host=None, **argd):
         super().__init__(*argt, **argd)
         self.host = host
-        self.current_path = PurePath('/')
+        self.current_path = PurePosixPath('/')
         self.type = 'https'
 
     def cwd(self, path):
-        self.current_path = PurePath(self.current_path, path)
+        self.current_path = PurePosixPath(self.current_path, path)
 
     def mlsd(self, path, facts=None):
-        url_ = self.type+'://'+self.host+str(PurePath(self.current_path, path))
+        url_ = self.type+'://'+self.host+str(PurePosixPath(self.current_path, path))
         resp = self.request('GET', url_)
         objs = self._parse_cdaweb_html(resp.data.decode('ascii'))
         if facts is None:
@@ -554,10 +554,10 @@ class FileDownloadCommander:
             for fInd, remoteFileName in enumerate(rawWork):
                 if isinstance(remoteFileName, list):
                     remoteFilePath = remoteFileName
-                    remoteFileName = str(PurePath(*remoteFileName))
+                    remoteFileName = str(PurePosixPath(*remoteFileName))
                 elif isinstance(remoteFileName, str):
                     remoteFilePath = remoteFileName.split('/')
-                remoteFileFullName = str(PurePath(self.downloadRootPath, remoteFileName))
+                remoteFileFullName = str(PurePosixPath(self.downloadRootPath, remoteFileName))
                 if self.downloadedFileNames:
                     downloadedFileName = self.downloadedFileNames[fInd]
                     if isinstance(downloadedFileName, str):
@@ -1049,7 +1049,7 @@ def readFTPHTTPFileInfoRecursively(client=None, host=None, commonPath=None, path
         facts_ = set(facts_)
         objs = client.mlsd(path=path, facts=facts_)
         for objName, objFact in objs:
-            objAbsName = str(PurePath(path, objName))
+            objAbsName = str(PurePosixPath(path, objName))
 #            objAbsName = '/'.join([path, objName])
             if objFact['type'] == 'dir':
                 fileInfoDict_ = readFTPHTTPFileInfoRecursively(client=client, path=objAbsName, verbose=verbose, facts=facts, logFileDir=logFileDir, logFileHandle=logFileHandle, protocol=protocol)
