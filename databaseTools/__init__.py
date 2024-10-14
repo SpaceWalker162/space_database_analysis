@@ -541,7 +541,7 @@ class FileDownloadCommander:
         self.timeout = timeout
         self.workerNumber = workerNumber
         self.monitorInterval = monitorInterval
-        self.workers = []
+        self.workers = {}
         self.monitors = []
         self.preparePendingWorks()
         self.protocol = protocol
@@ -583,33 +583,12 @@ class FileDownloadCommander:
         logging.info('active threads: {}'.format(threading.active_count()))
 
     def processQueue(self):
-        def listenToWorkers():
-            for i in reversed(range(len(self.workers))):
-                worker = self.workers[i]
-                if worker.is_alive():
-                    if worker.finishedAWork.is_set():
-                        self.processedN += 1
-                        worker.finishedAWork.clear()
-                        self.reportProgress()
-                        if self.pendingWorks.qsize > 0:
-                            worker.pendingWorks.put(self.pendingWorks.pop())
-                            logging.debug('a pending work assigned to a worker')
-                        else:
-                            logging.debug('commander: stopping a worker')
-                            self.stopWorkerAndMonitor(i)
-                            logging.debug('commander: a worker stopped')
-                else:
-                    logging.debug('commander: the worker is not alive')
-                    self.processedN += 1
-                    self.failedWorks.append(worker.currentWork)
-                    self.reportProgress()
-                    self.killWorkerAndMonitor(i)
-
         self.processedWorks = queue.Queue()
         self.failedWorks = queue.Queue()
         self.addWorkers()
         self.consecutiveFailure = 0
         while self.pendingWorks.qsize() > 0:
+            logging.debug("commander: processedWorks: {}".format(self.processedWorks))
             work, status, t_ = self.processedWorks.get()
             self.processedN += 1
             logging.debug('commander: processedN +1, {}\nstatus: {}'.format(work[0], status))
@@ -618,20 +597,21 @@ class FileDownloadCommander:
                 self.failedTries.append(t_)
                 self.failedWorks.put(work)
                 self.reportProgress()
-                if self.pendingWorks.qsize() > 0:
-                    numberOfFailedTriesToPauseAWhile = 5
-                    if self.consecutiveFailure >= numberOfFailedTriesToPauseAWhile:
-                        time_to_sleep = 60*20
-                        logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, stopping workers.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile))
-                        self.stopWorkers()
-                        logging.warning('Next try will begain after {time_to_sleep} seconds.'.format(time_to_sleep=time_to_sleep))
-                        time.sleep(time_to_sleep)
-                        self.addWorkers()
             elif status == 'finished':
                 self.consecutiveFailure = 0
                 self.reportProgress()
             else:
                 logging.warning('Unknown status of the download')
+
+            if self.pendingWorks.qsize() > 0:
+                numberOfFailedTriesToPauseAWhile = 5
+                if self.consecutiveFailure >= numberOfFailedTriesToPauseAWhile:
+                    time_to_sleep = 60*20
+                    logging.warning('Consecutive {numberOfFailedTriesToPauseAWhile} failed downloads in {numberOfFailedTriesToPauseAWhile} minutes detected, stopping workers.'.format(numberOfFailedTriesToPauseAWhile=numberOfFailedTriesToPauseAWhile))
+                    self.stopWorkers()
+                    logging.warning('Next try will begain after {time_to_sleep} seconds.'.format(time_to_sleep=time_to_sleep))
+                    time.sleep(time_to_sleep)
+                    self.addWorkers()
         logging.debug('commander: finished one loop over pending works, with {} failed works'.format(self.failedWorks.qsize()))
         try:
             self.stopWorkers()
@@ -694,8 +674,10 @@ class FileDownloader(StoppableThread):
             lgMess = self.ftp.login()
             logging.info(lgMess)
 
-        while not (self.pendingWorks.empty() or self.stopped()):
-            self.currentWork = self.pendingWorks.get(block=False)
+        while not self.stopped():
+            try:
+                self.currentWork = self.pendingWorks.get(timeout=self.timeout)
+            except: continue
             srcName, dstName = self.currentWork
             logging.debug('a work gotten with source name: {}\nand destination name: {}'.format(srcName, dstName))
             try:
