@@ -577,10 +577,7 @@ class FileDownloadCommander:
         self.failedWorks = []
 
     def reportProgress(self):
-        logging.info('progress: {}/{}'.format(self.processedN, self.worksN))
-        logging.debug('pending: {}'.format(self.pendingWorks.qsize()))
-        logging.info('failed: {}'.format(self.failedWorks.qsize()))
-        logging.info('active threads: {}'.format(threading.active_count()))
+        logging.info('''progress: {processedN}/{worksN}\npending: {pendingN}\nfailed: {failedN}\nactive threads: {threadN}'''.format(processedN=self.processedN, worksN=self.worksN, pendingN=self.pendingWorks.qsize(), failedN=self.failedWorks.qsize(), threadN=threading.active_count()))
 
     def processQueue(self):
         self.processedWorks = queue.Queue()
@@ -588,7 +585,7 @@ class FileDownloadCommander:
         self.addWorkers()
         self.consecutiveFailure = 0
         while self.processedN < self.worksN:
-            logging.debug("commander: processedWorks: {}".format(self.processedWorks))
+            logging.debug("commander: processedWorks: {}".format(list(self.processedWorks.queue)))
             work, status, t_ = self.processedWorks.get()
             self.processedN += 1
             logging.debug('commander: processedN +1, {}\nstatus: {}'.format(work[0], status))
@@ -672,7 +669,7 @@ class FileDownloader(StoppableThread):
 
         while not (self.pendingWorks.empty() or self.stopped()):
             if self.consecutiveFailure >= self.numberOfFailedTriesToPauseAWhile:
-                logging.warning('Consecutive {consecutiveFailure} failed downloads detected, stopping workers.'.format(consecutiveFailure=self.consecutiveFailure))
+                logging.warning('Worker: Consecutive {consecutiveFailure} failed downloads detected, pausing...'.format(consecutiveFailure=self.consecutiveFailure))
                 logging.warning('Next try will begain after {pause_period} seconds.'.format(pause_period=self.pause_period))
                 time.sleep(self.pause_period)
             try:
