@@ -541,7 +541,7 @@ class FileDownloadCommander:
         self.timeout = timeout
         self.workerNumber = workerNumber
         self.monitorInterval = monitorInterval
-        self.workers = {}
+        self.workers = []
         self.monitors = []
         self.preparePendingWorks()
         self.protocol = protocol
