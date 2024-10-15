@@ -340,7 +340,10 @@ class Spacecraft:
                                 para_ = {data_type: dataset.data[varName]}
                                 dataset.data[varName] = dat.Epochs(**para_).get_data(fm=self.epoch_type_to_load_data)
                 for varName, retName in variableNamesAndRetrievingNames:
-                    dataset.data[retName] = dataset.data.pop(varName) # 'pop' was 'get', to avoid multiple occurrence in the returned data dict we use pop instead.
+                    try:
+                        dataset.data[retName] = dataset.data.pop(varName) # 'pop' was 'get', to avoid multiple occurrence in the returned data dict we use pop instead.
+                    except:
+                        dataset.data[retName] = dataset.data.get(varName)
                     dataset.varInfoDict[retName] = dataset.varInfoDict.get(varName)
                 self.data.update({datasetRetrievingName: dataset.data})
                 self.metadata.update({datasetRetrievingName: dataset.varInfoDict})
