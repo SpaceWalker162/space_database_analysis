@@ -702,3 +702,24 @@ def rainbow_text_output(x, y, strings, colors, orientation='horizontal', ax=None
         for s, c in zip(strings[-2::-1], colors[-2::-1]):
             text = ax.annotate(s, xycoords=text, xy=(0, 0), verticalalignment="bottom", ha=ha, color=c)  # custom properties
 
+def plot_flag_bar(fig, ax, epochs, data, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02, ylabel=None, cbar_tickAndLabels=None, cbar_label=None):
+    '''
+    Parameters:
+        cbar_tickAndLabels: a dictionary e.g. {'ticks': [0, 1], 'labels': ['SW', 'SH']}
+
+    '''
+    cax_gap = cax_width / 3
+    if isinstance(epochs, dat.Epochs):
+        t = epochs.get_data(epoch_fmt)
+    elif isinstance(epochs, np.ndarray):
+        t = epochs
+    tMesh, valueMesh = np.meshgrid(np.append(t, t[-1]+t[-1]-t[-2]), np.array([0, 1]), indexing='ij')
+    pcm_ = ax.pcolormesh(tMesh, valueMesh, data[:, None], shading='flat', cmap='jet')
+    ax.set_yticks([])
+    ax_pos = ax.get_position()
+    cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
+    cax = fig.add_axes(cax_pos)
+    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', extend='max', label=cbar_label)
+    if cbar_tickAndLabels is not None:
+        cbar.set_ticks(**cbar_tickAndLabels)
+    ax.set_ylabel(ylabel)
