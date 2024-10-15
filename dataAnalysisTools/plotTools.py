@@ -713,8 +713,13 @@ def plot_flag_bar(fig, ax, epochs, data, epoch_fmt='CDF_TIME_TT2000', vmin=None,
         t = epochs.get_data(epoch_fmt)
     elif isinstance(epochs, np.ndarray):
         t = epochs
+    fUni = np.unique(data)
+    if vmin is None:
+        vmin = fUni[fUni>0][0]
+    if vmax is None:
+        vmax = data.max()
     tMesh, valueMesh = np.meshgrid(np.append(t, t[-1]+t[-1]-t[-2]), np.array([0, 1]), indexing='ij')
-    pcm_ = ax.pcolormesh(tMesh, valueMesh, data[:, None], shading='flat', cmap='jet')
+    pcm_ = ax.pcolormesh(tMesh, valueMesh, data[:, None], vmin=vmin, vmax=vmax, shading='flat', cmap='jet')
     ax.set_yticks([])
     ax_pos = ax.get_position()
     cax_pos = [ax_pos.x1+cax_gap, ax_pos.y0, cax_width, ax_pos.y1-ax_pos.y0]
