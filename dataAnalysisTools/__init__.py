@@ -172,6 +172,10 @@ def butter_lowpass_filter(data, cutoff, fs, order=5, axis=-1):
 
 
 def moving_average(data, n=1, axis=0):
+    '''
+    Parameters:
+        n: an integer, the window size of the moving average. If 1, this function returns the original data.
+    '''
     if axis != 0:
         data = np.swapaxes(data, axis, 0)
     ret = np.cumsum(data, axis=0)

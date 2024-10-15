@@ -669,8 +669,7 @@ class FileDownloader(StoppableThread):
 
         while not (self.pendingWorks.empty() or self.stopped()):
             if self.consecutiveFailure >= self.numberOfFailedTriesToPauseAWhile:
-                logging.warning('Worker: Consecutive {consecutiveFailure} failed downloads detected, pausing...'.format(consecutiveFailure=self.consecutiveFailure))
-                logging.warning('Next try will begain after {pause_period} seconds.'.format(pause_period=self.pause_period))
+                logging.warning('Worker: Consecutive {consecutiveFailure} failed downloads detected, pausing...\nNext try will begain after {pause_period} seconds.'.format(consecutiveFailure=self.consecutiveFailure, pause_period=self.pause_period))
                 time.sleep(self.pause_period)
             try:
                 self.currentWork = self.pendingWorks.get(block=False)
