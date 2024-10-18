@@ -638,7 +638,7 @@ class StoppableThread(threading.Thread):
         return self._stop_event.is_set()
 
 class FileDownloader(StoppableThread):
-    def __init__(self, host=None, pendingWorks=None, processedWorks=None, failedWorks=None, failureTimes=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp', numberOfFailedTriesToPauseAWhile=5, pause_period=20*60):
+    def __init__(self, host=None, pendingWorks=None, processedWorks=None, failedWorks=None, failureTimes=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp', numberOfFailedTriesToPauseAWhile=5, pause_period=60*60):
         '''
         Parameters:
             consecutiveFailureToPause: a tuple with two numbers, the first specifying the numberOfFailedTriesToPauseAWhile, the second specifying the seconds to pause.
@@ -671,6 +671,7 @@ class FileDownloader(StoppableThread):
             if self.consecutiveFailure >= self.numberOfFailedTriesToPauseAWhile:
                 logging.warning('Worker: Consecutive {consecutiveFailure} failed downloads detected, pausing...\nNext try will begain after {pause_period} seconds.'.format(consecutiveFailure=self.consecutiveFailure, pause_period=self.pause_period))
                 time.sleep(self.pause_period)
+                self.consecutiveFailure = 0
             try:
                 self.currentWork = self.pendingWorks.get(block=False)
             except queue.Empty:
