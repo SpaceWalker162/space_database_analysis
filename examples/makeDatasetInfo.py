@@ -25,10 +25,10 @@ if __name__ == '__main__':
 #        dataset.update({'dataset_path': dataset_path})
 #        add_dic[datasetID] = dataset
 
-    for name in ['MOM', 'SPEC']:
-        datasetID = 'MVN_SWI_L2_ONBOARDSVY' + name
+    for name in ['ONBOARDSVYMOM', 'ONBOARDSVYSPEC', 'COARSESVY3D', 'COARSEARC3D', 'FINESVY3D', 'FINEARC3D']:
+        datasetID = 'MVN_SWI_L2_' + name
         dataset = {'Id': datasetID}
-        dataset_path = os.path.join('maven', 'swia', 'l2', 'onboardsvy'+name.lower())
+        dataset_path = os.path.join('maven', 'swia', 'l2', name.lower())
         dataset.update({'dataset_path': dataset_path})
         add_dic[datasetID] = dataset
 
