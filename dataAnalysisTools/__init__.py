@@ -1189,6 +1189,8 @@ def sphericalAngleTransform(data, coordinate=None, standardOutRange=True, inRang
             elif all(np.abs(np.array(inRange) - np.array([0, 24])) < 10**(-5)):
                 data_ = (data - 12)/12*np.pi
                 dataTransformed = data_ + (np.sign(data_) - 1)*np.sign(data_)*np.pi
+            elif np.all(np.array(inRange) == np.array([0, 360])):
+                dataTransformed = data/180*np.pi
             else:
                 raise Exception('bad input range')
     return dataTransformed
