@@ -4,6 +4,7 @@ import numpy as np
 import cdflib    # see github.com/MAVENSDC/cdflib
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseUserTools as dut
+from . import constants as const
 import functools
 #from datetime import datetime
 import datetime as dt
@@ -23,22 +24,6 @@ import spacepy.coordinates as sppcoo
 <A, B> means either A or B
 [A, B] means both A and B
 '''
-
-k_B = 1.380649*10**(-23) # J/Klevin
-au_in_meters = 1.4959787 * 10**11
-radius_Earth_in_meters = 6.378137 * 10**6
-radius_Jupiter_in_meters = 6.9911 * 10**7
-radius_Saturn_in_meters = 5.8232 * 10**7
-radius_Mars_in_meters = 3.3895 * 10**6
-radius_Mercury_in_meters = 2.4397 * 10**6
-solarNorthPoleOfRotationInICRFEquatorial = np.array([63.87, 286.13])/180*np.pi # latitude and longitude
-saturnianNorthPoleOfRotationInICRFEquatorial = np.array([83.54, 40.58])/180*np.pi
-
-mass_proton = 1.6726 * 10**(-27) # in kg
-mass_electron = 9.11 * 10**(-31) # in kg
-
-eV = 1.602176634 * 10**(-19) # in Joule
-magnetic_permeability_in_vacuum = 4*np.pi*10**(-7)
 
 class mms:
     def __init__(self, spacecrafts=None, workDataDir=None, workDataDirsBak=None):
@@ -150,6 +135,77 @@ class mms:
             energy_delta = spacecraft.data[source]['E_delta'][0]
             energyTable = energyTable_ + energy_delta
             partial_numberdensity = spacecraft.data[source]['f(E)'] * 10**6 # in m^-3
+
+class maven:
+
+    @staticmethod
+    def swia_calculate_moments_from_3d(datetimeRange, workDataDir, workDataDirsBak=None, copy_if_not_exist=False, search_online=False):
+        spacecraft = dut.Spacecraft(mission='maven', name='maven', workDataDir=workDataDir, workDataDirsBak=workDataDirsBak)
+        datasets_variables_with_retrieving_names = {
+            'MVN_SWI_L2_COARSESVY3D': ['SWI-dist', ('epoch', 't'), ('atten_state', 'atten_state'), ('diff_en_fluxes', 'diff_en_fluxes'), ('energy_coarse', 'energy'), ('theta_coarse', 'theta'), ('theta_atten_coarse', 'theta_atten'), ('phi_coarse', 'phi')],
+            }
+        spacecraft.loadData(datetimeRange=datetimeRange, datasets_variables_with_retrieving_names=datasets_variables_with_retrieving_names, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+
+        source = 'SWI-dist'
+        t_3d = spacecraft.data[source]['t']
+        atten_state = spacecraft.data[source]['atten_state']
+        def_ion = np.swapaxes(spacecraft.data[source]['diff_en_fluxes'], 1, 3) / (u.cm**2*u.s)
+        energy = spacecraft.data[source]['energy']
+        theta = spacecraft.data[source]['theta']
+        theta_atten_closed = spacecraft.data[source]['theta_atten']
+        phi = spacecraft.data[source]['phi']
+
+        theta_spherical = sphericalAngleTransform(theta, coordinate='theta', inRange=[-90, 90])
+        phi_spherical = sphericalAngleTransform(phi, coordinate='phi', inRange=[0, 360])
+        phi_half_window = normalizeAngle(np.diff(phi_spherical))/2
+        phi_bound = np.zeros((phi_spherical.shape[0]+1, *phi_spherical.shape[1:]))
+        phi_bound[1:-1] = phi_half_window +  phi_spherical[:-1]
+        phi_bound[0] = phi_spherical[0] - phi_half_window[0]
+        phi_bound[-1] = phi_spherical[-1] + phi_half_window[-1]
+        phi_bound = normalizeAngle(phi_bound)
+        phi_bin_width = normalizeAngle(np.diff(phi_bound))
+        phi_bound = np.insert(np.cumsum(normalizeAngle(np.diff(phi_bound))), 0, 0) + phi_bound[0]
+
+        theta_half_window = np.diff(theta_spherical, axis=0)/2
+        theta_bound = np.zeros((theta_spherical.shape[0]+1, *theta_spherical.shape[1:]))
+        theta_bound[1:-1] = theta_half_window +  theta_spherical[:-1]
+        theta_bound[0] = theta_spherical[0] - theta_half_window[0]
+        theta_bound[-1] = theta_spherical[-1] + theta_half_window[-1]
+
+        solid_angle = np.moveaxis(np.abs(-(np.cos(theta_bound[1:]) - np.cos(theta_bound[:-1]))[:, None] * phi_bin_width[None, :, None]), -1, 0)
+
+        energy_log = np.log(energy)
+        energy_log_half_window = np.diff(energy_log)/2
+        energy_log_bound = np.zeros((energy_log.shape[0]+1, *energy_log.shape[1:]))
+        energy_log_bound[1:-1] = energy_log_half_window +  energy_log[:-1]
+        energy_log_bound[0] = energy_log[0] - energy_log_half_window[0]
+        energy_log_bound[-1] = energy_log[-1] + energy_log_half_window[-1]
+        energy_bound = np.e**energy_log_bound
+        energy_width = -np.diff(energy_bound)
+        speed =  np.sqrt(energy*u.eV * 2 / const.m_p)
+        v_spherical_coord = np.zeros((len(energy), len(theta), len(phi), 3))
+        v_spherical_coord[:, :, :, 0] = speed.to('cm/s')[:, None, None]
+        v_spherical_coord[:, :, :, 2] = phi[None, None, :]
+        for thetaInd in range(len(theta)):
+            v_spherical_coord[:, thetaInd, :, 1] = theta[thetaInd, :, None]
+        v_cartesian_coord = spherical2cartesian(v_spherical_coord) * u.cm/u.s
+        speed_cartesian_coord = np.linalg.norm(v_cartesian_coord, axis=-1)
+        factor_n = (1/speed*energy_width/energy)[None, :, None, None] * solid_angle[None, :, :, :] * def_ion
+        density = np.sum(factor_n, axis=(1, 2, 3)).to('cm^-3')
+
+        angle_factors = np.swapaxes(angle_factors_in_integrating_1st_moment(theta_bound, phi_bound), axis1=0, axis2=1)[None, ...]
+        factor_v = ((energy_width/energy)[None, :, None, None] * def_ion)[..., None] * angle_factors
+        bulk_velocity = np.sum(factor_v, axis=(1, 2, 3))/density[:, None]
+
+        temperature_tensor_minus_bulkv = []
+        for ind in [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2), (2, 2)]:
+            temperature_tensor_minus_bulkv.append(density[:, None] * (bulk_velocity[:, ind[0]] * bulk_velocity[:, ind[1]])[:, None])
+        temperature_tensor_minus_bulkv = np.concatenate(temperature_tensor_minus_bulkv, axis=-1)
+        angle_factors = np.swapaxes(angle_factors_in_integrating_2nd_moment(theta_bound, phi_bound), axis1=0, axis2=1)
+        factor_temperature = ((speed * energy_width/energy)[None, :, None, None] * def_ion)[..., None] * angle_factors[None, ...]
+        temperature_tensor = (const.m_p * (np.sum(factor_temperature, axis=(1, 2, 3)) - temperature_tensor_minus_bulkv) /density[:, None]).to('eV')
+        temperature = np.mean(temperature_tensor[:, [0, 3, 5]], axis=-1)
+        return t_3d, density, bulk_velocity, temperature
 
 
 def butter_lowpass(cutoff, fs, order=5):
@@ -1860,3 +1916,150 @@ def datetime_ceil(t, round_gap=None):
         round_gap: timedelta object
     '''
     return datetime_floor(t, round_gap=round_gap) + round_gap
+
+
+def angle_factor_in_integrating_1st_moment(theta_bound, phi_bound, axis=None, check_phi=True):
+    r'''
+    Purpose:
+        this function is a part of a group functions to calculate moment from distribution function.
+    Parameters:
+        theta_bound: pass
+        phi_bound: make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound. For example, if np.array([3/2*np.pi, 7/4*np.pi, 1/4*np.pi, 1/2*np.pi]) is provided, np.diff may result in a bad diff between 7/4*np.pi and 1/4*np.pi. The intended difference may be 1/2*np.pi. Therefore, make sure convert this array to np.array([3/2*np.pi, 7/4*np.pi, 9/4*np.pi, 5/2*np.pi]) before using this function
+        axis: 0, 1, or 2, to choose the angle factor used in calculating vx, vy, or vz.
+    Return:
+        angle_factor \gamma: defined according to v_i = \sum\sum \parens(\Delta E/E) \diff{J_E}{E} \gamma_i, where \diff{J_E}{E}=E\vec{v}f d^3v/dE is differential energy flux.
+    '''
+    if check_phi:
+        if np.any(np.abs(np.diff(phi_bound)) > np.pi):
+            raise Exception('check phi_bound to make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound.')
+    if axis == 0: # x-axis
+        def theta_func(theta):
+            return theta/2 - 1/4*np.sin(2*theta)
+        def phi_func(phi):
+            return np.sin(phi)
+    elif axis == 1:
+        def theta_func(theta):
+            return theta/2 - 1/4*np.sin(2*theta)
+        def phi_func(phi):
+            return -np.cos(phi)
+    elif axis == 2:
+        def theta_func(theta):
+            return -1/2*np.cos(theta)**2
+        def phi_func(phi):
+            return phi
+    return (theta_func(theta_bound[1:]) - theta_func(theta_bound[:-1]))[..., None] * (phi_func(phi_bound[1:]) - phi_func(phi_bound[:-1]))[None, :]
+
+
+def angle_factors_in_integrating_1st_moment(theta_bound, phi_bound, axis=['x', 'y', 'z'], check_phi=True):
+    r'''
+    Purpose:
+        this function is a part of a group functions to calculate moment from distribution function.
+    Parameters:
+        theta_bound: pass
+        phi_bound: make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound. For example, if np.array([3/2*np.pi, 7/4*np.pi, 1/4*np.pi, 1/2*np.pi]) is provided, np.diff may result in a bad diff between 7/4*np.pi and 1/4*np.pi. The intended difference may be 1/2*np.pi. Therefore, make sure convert this array to np.array([3/2*np.pi, 7/4*np.pi, 9/4*np.pi, 5/2*np.pi]) before using this function
+        axis: a list such as ['x', 'y', 'z'] or a str 'x' to choose the angle factor used in calculating vx, vy, or vz.
+    Return:
+        angle_factor \gamma: defined according to v_i = \sum\sum \parens(\Delta E/E) \diff{J_E}{E} \gamma_i, where \diff{J_E}{E}=E\vec{v}f d^3v/dE is differential energy flux.
+    Examples:
+        # to calculate bulk_velocity from maven swia coarsesvy3d data
+        angle_factors = np.swapaxes(dat.angle_factors_in_integrating_1st_moment(theta_bound, phi_bound), axis1=0, axis2=1)[None, ...]
+        factor_v = ((energy_width/energy)[None, :, None, None] * def_ion)[..., None] * angle_factors * u.cm**(-3) *u.cm/u.s
+        bulk_velocity = np.sum(factor_v, axis=(1, 2, 3))/density[:, None]
+    '''
+    if check_phi:
+        if np.any(np.abs(np.diff(phi_bound)) > np.pi):
+            raise Exception('check phi_bound to make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound.')
+
+    if isinstance(axis, list):
+        angle_factors = []
+        for axis_ in axis:
+            angle_factors.append(angle_factors_in_integrating_1st_moment(theta_bound, phi_bound, axis=axis_, check_phi=check_phi)[..., None])
+        return np.concatenate(angle_factors, axis=-1)
+    else: # main branch
+        if axis == 'x': # x-axis
+            def theta_func(theta):
+                return theta/2 - 1/4*np.sin(2*theta)
+            def phi_func(phi):
+                return np.sin(phi)
+        elif axis == 'y':
+            def theta_func(theta):
+                return theta/2 - 1/4*np.sin(2*theta)
+            def phi_func(phi):
+                return -np.cos(phi)
+        elif axis == 'z':
+            def theta_func(theta):
+                return -1/2*np.cos(theta)**2
+            def phi_func(phi):
+                return phi
+        theta_diff = np.diff(theta_bound, axis=0)
+        phi_diff = np.diff(phi_bound, axis=0)
+        sign = 1
+        if np.all(theta_diff < 0): sign *= -1
+        elif np.all(theta_diff > 0): pass
+        else: raise Exception('Unexpected order of theta_bound')
+        if np.all(phi_diff < 0): sign *= -1
+        elif np.all(phi_diff > 0): pass
+        else: raise Exception('Unexpected order of phi_bound')
+        return sign * (theta_func(theta_bound[1:]) - theta_func(theta_bound[:-1]))[..., None] * (phi_func(phi_bound[1:]) - phi_func(phi_bound[:-1]))[None, :]
+
+def angle_factors_in_integrating_2nd_moment(theta_bound, phi_bound, axis=['xx', 'xy', 'xz', 'yy', 'yz', 'zz'], check_phi=True):
+    r'''
+    Purpose:
+        This function is a part of a group functions to calculate moment from distribution function. Check angle_factors_in_integrating_1st_moment for more information.
+    Parameters:
+        theta_bound:
+        phi_bound: make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound. For example, if np.array([3/2*np.pi, 7/4*np.pi, 1/4*np.pi, 1/2*np.pi]) is provided, np.diff may result in a bad diff between 7/4*np.pi and 1/4*np.pi. The intended difference may be 1/2*np.pi. Therefore, make sure convert this array to np.array([3/2*np.pi, 7/4*np.pi, 9/4*np.pi, 5/2*np.pi]) before using this function
+    Return:
+        angle_factor \gamma: defined according to v_iv_j = \sum\sum v\parens(\Delta E/E) \diff{J_E}{E} \gamma_{ij}, where \diff{J_E}{E}=E\vec{v}f d^3v/dE is differential energy flux.
+    '''
+    if check_phi:
+        if np.any(np.abs(np.diff(phi_bound)) > np.pi):
+            raise Exception('check phi_bound to make sure np.diff(phi_bound) gives the expected difference between the upper and lower bound.')
+
+    if isinstance(axis, list):
+        angle_factors = []
+        for axis_ in axis:
+            angle_factors.append(angle_factors_in_integrating_2nd_moment(theta_bound, phi_bound, axis=axis_, check_phi=check_phi)[..., None])
+        return np.concatenate(angle_factors, axis=-1)
+    else: # main branch
+        if axis == 'xx':
+            def theta_func(theta):
+                return -(3*np.cos(theta))/4 + 1/12*np.cos(3*theta)
+            def phi_func(phi):
+                return phi/2 + 1/4*np.sin(2*phi)
+        elif axis == 'xy':
+            def theta_func(theta):
+                return -(3*np.cos(theta))/4 + 1/12*np.cos(3*theta)
+            def phi_func(phi):
+                return -(1/2)*np.cos(phi)**2
+        elif axis == 'xz':
+            def theta_func(theta):
+                return np.sin(theta)**3/3
+            def phi_func(phi):
+                return phi
+        elif axis == 'yy':
+            def theta_func(theta):
+                return -(3*np.cos(theta))/4 + 1/12*np.cos(3*theta)
+            def phi_func(phi):
+                return phi/2 - 1/4*np.sin(2*phi)
+        elif axis == 'yz':
+            def theta_func(theta):
+                return np.sin(theta)**3/3
+            def phi_func(phi):
+                return -np.cos(phi)
+        elif axis == 'zz':
+            def theta_func(theta):
+                return -(1/3)*np.cos(theta)**3
+            def phi_func(phi):
+                return phi
+        else: raise Exception('Unexpected axis {}'.format(axis))
+        theta_diff = np.diff(theta_bound, axis=0)
+        phi_diff = np.diff(phi_bound, axis=0)
+        sign = 1
+        if np.all(theta_diff < 0): sign *= -1
+        elif np.all(theta_diff > 0): pass
+        else: raise Exception('Unexpected order of theta_bound')
+        if np.all(phi_diff < 0): sign *= -1
+        elif np.all(phi_diff > 0): pass
+        else: raise Exception('Unexpected order of phi_bound')
+        return sign * (theta_func(theta_bound[1:]) - theta_func(theta_bound[:-1]))[..., None] * (phi_func(phi_bound[1:]) - phi_func(phi_bound[:-1]))[None, :]
