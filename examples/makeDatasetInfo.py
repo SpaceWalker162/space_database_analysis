@@ -38,6 +38,12 @@ if __name__ == '__main__':
     dataset.update({'dataset_path': dataset_path})
     add_dic[datasetID] = dataset
 
+    datasetID = 'MVN_INSITU_KP-4SEC'
+    dataset = {'Id': datasetID}
+    dataset_path = os.path.join('maven', 'insitu', 'kp-4sec', 'cdfs')
+    dataset.update({'dataset_path': dataset_path})
+    add_dic[datasetID] = dataset
+
     database.load_additional_datasets_info()
     database.update_additional_datasets_info(add_dic)
     database.save_additinal_datasets_info()
