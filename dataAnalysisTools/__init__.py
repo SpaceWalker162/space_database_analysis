@@ -1356,6 +1356,8 @@ def unit_quaternion_spherical_linear_interpolation(tNew, tOri, q):
         tNewStartInd = tNewNextStartInd
     return qNew
 
+quaternionFromMatrix = sppcoo.quaternionFromMatrix
+
 
 def angleBetweenVectors(v1, v2):
     '''
@@ -1807,14 +1809,17 @@ def quaternionMultiply(qs, scalarPos='last'):
     else: raise Exception
 
 def rotateVectorUsingQuaternion(vec, quat, scalarPos='last'):
+    if isinstance(vec, u.Quantity):
+        vec_unit = vec.unit
     if scalarPos == 'last':
         quat_inverse = np.copy(quat)
         quat_inverse[..., :3] *= -1
         vec_quat = np.zeros((*vec.shape[:-1], 4))
         vec_quat[..., :3] = vec
-        new_vec = quaternionMultiply([quat, vec_quat, quat_inverse])
-    return new_vec[..., :3]
-
+        new_vec = quaternionMultiply([quat, vec_quat, quat_inverse])[..., :3]
+    if isinstance(vec, u.Quantity):
+        new_vec *= vec_unit
+    return new_vec
 
 def mask_dict_of_ndarray(dic, mask, copy=False):
     dic_new = {}
