@@ -3,7 +3,6 @@ import selenium
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-import selenium.webdriver.common.driver_finder
 import logging
 import os
 
@@ -20,7 +19,7 @@ options.binary_location = "/Applications/Google\ Chrome.app/Contents/MacOS/Googl
 #driver = webdriver.Chrome(options=options, service=s)
 #driver = webdriver.Chrome(options=options)
 driver = webdriver.Chrome()
-
+##
 driver.get("https://naif.jpl.nasa.gov/pub/naif/pds/pds4/maven/maven_spice/spice_kernels/ck/")
 driver.get("https://naif.jpl.nasa.gov/pub/naif/pds/pds4/maven/maven_spice/spice_kernels/ck/mvn_app_pred_141205_141209_v01.bc")
 
