@@ -6,7 +6,7 @@ import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 #import reconnecting_ftp
 
-def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2, delay_between_downloads=5):
+def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2, delay_between_downloads=2):
     '''
     Purpose:
         download data files from CDAWeb through FTP
