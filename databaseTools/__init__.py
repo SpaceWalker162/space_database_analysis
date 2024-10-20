@@ -711,11 +711,10 @@ class FileDownloader(StoppableThread):
             speed = fileSizeInM/timeCost.total_seconds()
             logging.info('{} downloaded at {}'.format(dstName, datetime.now()))
             logging.info(" size: {}M, time cost: {}, download speed: {:.3f}M/s" .format(fileSizeInM, timeCost, speed))
-            logging.debug('worker: a work finished')
             status = 'finished'
             self.processedWorks.put((self.currentWork, status, datetime.now()))
-            logging.debug('worker: {} with status {} sent to commander'.format(self.currentWork[0], status))
             self.consecutiveFailure = 0
+            logging.debug('worker: {} with status {} sent to commander. I am going to rest for {} seconds'.format(self.currentWork[0], status, self.delay_between_downloads))
             time.sleep(self.delay_between_downloads)
         logging.debug('worker: not in while loop')
 
