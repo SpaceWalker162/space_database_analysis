@@ -525,10 +525,11 @@ class ReconnectingFTP(FTP_TLS):
         return objs
 
 class FileDownloadCommander:
-    def __init__(self, remoteFileNames, host=None, downloadRootPath=None, downloadedFileNames=None, destPath='.', verbose=False, keepDownloading=False, blocksize=32768, timeout=20, workerNumber=2, monitorInterval=10, protocol='ftp'):
+    def __init__(self, remoteFileNames, host=None, downloadRootPath=None, downloadedFileNames=None, destPath='.', verbose=False, keepDownloading=False, blocksize=32768, timeout=20, workerNumber=2, monitorInterval=10, protocol='ftp', delay_between_downloads=0):
         '''
         Parameters:
             remoteFileNames: a list of string, such as ['mms/mms1/.../fileName', ...], or a list of list of string
+            delay_between_downloads: the time in seconds to sleep between downloads. It is recommended to set a delay to ease the load of the remote server. Otherwise the remote administrator may ban the downloader.
         '''
         self.remoteFileNames = remoteFileNames
         self.host = host
@@ -545,6 +546,7 @@ class FileDownloadCommander:
         self.monitors = []
         self.preparePendingWorks()
         self.protocol = protocol
+        self.delay_between_downloads = delay_between_downloads
         self.failedTries = []
 
     def preparePendingWorks(self, source='remoteFileNames'):
@@ -577,7 +579,8 @@ class FileDownloadCommander:
         self.failedWorks = []
 
     def reportProgress(self):
-        logging.info('''progress: {processedN}/{worksN}\npending: {pendingN}\nfailed: {failedN}\nactive threads: {threadN}'''.format(processedN=self.processedN, worksN=self.worksN, pendingN=self.pendingWorks.qsize(), failedN=self.failedWorks.qsize(), threadN=threading.active_count()))
+        failedN = self.failedWorks.qsize()
+        logging.info('''progress (suc/pro/tot): {successN}/{processedN}/{worksN}\npending: {pendingN}\nfailed: {failedN}\nactive threads: {threadN}'''.format(successN=self.processedN-failedN ,processedN=self.processedN, worksN=self.worksN, pendingN=self.pendingWorks.qsize(), failedN=failedN, threadN=threading.active_count()))
 
     def processQueue(self):
         self.processedWorks = queue.Queue()
@@ -609,7 +612,7 @@ class FileDownloadCommander:
 
     def addWorkers(self):
         for workerInd in range(self.workerNumber - len(self.workers)):
-            worker = FileDownloader(host=self.host, pendingWorks=self.pendingWorks, processedWorks=self.processedWorks, verbose=self.verbose, blocksize=self.blocksize, timeout=self.timeout, protocol=self.protocol)
+            worker = FileDownloader(host=self.host, pendingWorks=self.pendingWorks, processedWorks=self.processedWorks, verbose=self.verbose, blocksize=self.blocksize, timeout=self.timeout, protocol=self.protocol, delay_between_downloads=self.delay_between_downloads)
             worker.start()
             self.workers.append(worker)
 
@@ -638,7 +641,7 @@ class StoppableThread(threading.Thread):
         return self._stop_event.is_set()
 
 class FileDownloader(StoppableThread):
-    def __init__(self, host=None, pendingWorks=None, processedWorks=None, failedWorks=None, failureTimes=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp', numberOfFailedTriesToPauseAWhile=5, pause_period=60*60):
+    def __init__(self, host=None, pendingWorks=None, processedWorks=None, failedWorks=None, failureTimes=None, verbose=False, blocksize=32768, timeout=20, protocol='ftp', numberOfFailedTriesToPauseAWhile=5, pause_period=60*60, delay_between_downloads=0):
         '''
         Parameters:
             consecutiveFailureToPause: a tuple with two numbers, the first specifying the numberOfFailedTriesToPauseAWhile, the second specifying the seconds to pause.
@@ -658,6 +661,7 @@ class FileDownloader(StoppableThread):
         self.protocol = protocol
         self.numberOfFailedTriesToPauseAWhile = numberOfFailedTriesToPauseAWhile
         self.pause_period = pause_period
+        self.delay_between_downloads = delay_between_downloads
         super().__init__(target=self.process, daemon=True)
 
     def process(self):
@@ -712,6 +716,7 @@ class FileDownloader(StoppableThread):
             self.processedWorks.put((self.currentWork, status, datetime.now()))
             logging.debug('worker: {} with status {} sent to commander'.format(self.currentWork[0], status))
             self.consecutiveFailure = 0
+            time.sleep(self.delay_between_downloads)
         logging.debug('worker: not in while loop')
 
     def _handle_exception_during_downloading(self, f):

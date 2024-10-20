@@ -6,7 +6,7 @@ import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 #import reconnecting_ftp
 
-def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2):
+def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSource='internet', logFileDir='', protocol='ftp', workerNumber=2, delay_between_downloads=5):
     '''
     Purpose:
         download data files from CDAWeb through FTP
@@ -130,6 +130,6 @@ def downloadSPDF(downloadDatabaseDir, databaseDirs, dataNameDict, fileNamesSourc
             total_size += float(toD[-1])
     print('number of files to download: {}'.format(len(filePaths)))
     print('total size to download: {}'.format(ot.sizeof_fmt(total_size)))
-    ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=120, workerNumber=workerNumber, monitorInterval=10, protocol=protocol)
+    ftpDownloader = dbt.FileDownloadCommander(remoteFileNames=filePaths, host=host, downloadRootPath=remoteDataDir, downloadedFileNames=None, destPath=downloadDataDir, verbose=verbose, keepDownloading=True, blocksize=downloadBlocksize, timeout=120, workerNumber=workerNumber, monitorInterval=10, protocol=protocol, delay_between_downloads=delay_between_downloads)
     ftpDownloader.processQueue()
     print('End of the Program')
