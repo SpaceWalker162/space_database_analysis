@@ -596,7 +596,7 @@ class Dataset:
         numFiles = len(filePaths)
 #        filePath = None
         if numFiles == 0:
-            logging.warning("No file was found under {}".format(absolutePathToDataset))
+            logging.warning("No file was found under {} while looking for dataset: {}".format(absolutePathToDataset, self.datasetID))
 #        elif numFiles == 1:
 #            filePath = filePaths[0]
 #            logging.info("file found: {}".format(filePath))
@@ -616,12 +616,12 @@ class Dataset:
             search_func = findFileNames
             beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(datetimeRange[0])
             search_criteria = self._define_search_criteria(beginOfTheFilePeriod, endOfTheFilePeriod, dateTime=None, size='allSize', **para)
-            logging.info('looking for file with string criteria: {}'.format(search_criteria['strings']))
+            logging.debug('looking for file with string criteria: {}'.format(search_criteria['strings']))
         elif search_method == 'irregular':
             search_func = findFileNamesInTimeRange
             timedeltas = [-timedelta(seconds=3600*6), timedelta(seconds=3600*6)]
             search_criteria = {'timeRange': [datetime_+timedelta_ for datetime_, timedelta_ in zip(datetimeRange, timedeltas)], 'getTimeFromNameFunc': getTimeFromName, 'strings': [self.datasetID.lower()]}
-            logging.info('looking for file with string criteria: {} in datetime range {}/{}'.format(search_criteria['strings'], *search_criteria['timeRange']))
+            logging.debug('looking for file with string criteria: {} in datetime range {}/{}'.format(search_criteria['strings'], *search_criteria['timeRange']))
 
         filePaths = FileList(self._get_file_paths(self.datasetAbsolutePath, dateTime=datetimeRange[0], search_func=search_func, **search_criteria))
         filePaths.refine_files()
