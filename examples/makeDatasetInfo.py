@@ -16,8 +16,8 @@ if __name__ == '__main__':
 
     ## to initialize, uncomment the following lines and run
     database.make_additional_datasets_info()
-    database.add_example_time_interval_to_add_dataset_info()
-    
+#    database.add_example_time_interval_to_add_dataset_info()
+
     ## to add user defined information to datasets in the database use the following codes
     add_dic = {}
 #    for spacecraftInd in range(1, 5):
@@ -35,7 +35,7 @@ if __name__ == '__main__':
 #        dataset.update({'dataset_path': dataset_path})
 #        add_dic[datasetID] = dataset
 
-    for datasetID in ['WI_H0_MFI', 'WI_H0_SWE', 'WI_H1_SWE', 'WI_K0_SWE']:
+    for datasetID in ['WI_H0_MFI', 'WI_H0_SWE', 'WI_H1_SWE', 'WI_K0_SWE', 'WI_K0_3DP', 'WI_PLSP_3DP']:
         dataset = {'Id': datasetID}
         datasetID_com = datasetID.split('_')
         inst = datasetID_com[-1]
