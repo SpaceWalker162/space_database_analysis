@@ -25,24 +25,13 @@ if __name__ == '__main__':
 #        dataset.update({'dataset_path': dataset_path})
 #        add_dic[datasetID] = dataset
 
-    for name in ['ONBOARDSVYMOM', 'ONBOARDSVYSPEC', 'COARSESVY3D', 'COARSEARC3D', 'FINESVY3D', 'FINEARC3D']:
-        datasetID = 'MVN_SWI_L2_' + name
+    for datasetID in ['WI_H0_MFI', 'WI_H0_SWE', 'WI_H1_SWE', 'WI_K0_SWE']:
         dataset = {'Id': datasetID}
-        dataset_path = os.path.join('maven', 'swia', 'l2', name.lower())
+        datasetID_com = datasetID.split('_')
+        inst = datasetID_com[-1]
+        dataset_path = os.path.join('wind', inst.lower(), '_'.join([inst.lower(), datasetID_com[1].lower()]))
         dataset.update({'dataset_path': dataset_path})
         add_dic[datasetID] = dataset
-
-    datasetID = 'MVN_MAG_L2-SUNSTATE-1SEC'
-    dataset = {'Id': datasetID}
-    dataset_path = os.path.join('maven', 'mag', 'l2', 'sunstate-1sec', 'cdfs')
-    dataset.update({'dataset_path': dataset_path})
-    add_dic[datasetID] = dataset
-
-    datasetID = 'MVN_INSITU_KP-4SEC'
-    dataset = {'Id': datasetID}
-    dataset_path = os.path.join('maven', 'insitu', 'kp-4sec', 'cdfs')
-    dataset.update({'dataset_path': dataset_path})
-    add_dic[datasetID] = dataset
 
     database.load_additional_datasets_info()
     database.update_additional_datasets_info(add_dic)

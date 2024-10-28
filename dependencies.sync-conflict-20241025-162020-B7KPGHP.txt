@@ -1,0 +1,4 @@
+# this file lists required modules that are not included in anaconda
+cdflib
+cdasws
+wolframclient
