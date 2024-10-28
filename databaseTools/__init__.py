@@ -149,6 +149,9 @@ class Database:
     def define_add_info(self, datasetID):
         dID = datasetID
         dataset = {'Id': dID}
+        cdaswsObj = cdasws.CdasWs()
+        timeInterval = cdaswsObj.get_example_time_interval(dID)
+        dataset['example_time_interval'] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
         if dID[:3] == 'MMS':
             dataset_path = os.path.join('mms', *dID.split('_')).lower()
             dataset.update({'dataset_path': dataset_path})
@@ -190,6 +193,7 @@ class Database:
             elif dIDComponents[-1] == 'SWE':
                 dataset_path = os.path.join('ace', 'swepam', 'level_2_cdaweb', 'swe_'+dIDComponents[1].lower())
                 dataset.update({'dataset_path': dataset_path})
+
         return dataset
 
     def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):

@@ -33,6 +33,12 @@ if __name__ == '__main__':
     full_file_path = os.path.join(save_path, file_name)
     urlretrieve(cdf_file_info_url, full_file_path)
 
+    datasetID = 'WI_H0_MFI'
+    timeInterval = cdaswsObj.get_example_time_interval(datasetID)
+    variable_names = cdaswsObj.get_variable_names(datasetID)
+    timeInterval.basic_iso_format()
+    timeInterval._start
+    timeInterval._end
     timeInterval = cdaswsObj.get_example_time_interval(dataset['Id'])
     variable_names = cdaswsObj.get_variable_names(dataset['Id'])
     variables = cdaswsObj.get_variables(dataset['Id'])

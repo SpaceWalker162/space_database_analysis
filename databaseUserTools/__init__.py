@@ -32,8 +32,8 @@ from wolframclient.evaluation import WolframLanguageSession
 import space_database_analysis.otherTools as ot
 import space_database_analysis.databaseTools as dbt
 import space_database_analysis.dataAnalysisTools as dat
-import space_database_analysis.examples.makeDatasetInfo
-import space_database_analysis.examples.cdasws_example
+#import space_database_analysis.examples.makeDatasetInfo
+#import space_database_analysis.examples.cdasws_example
 #from space_database_analysis.databaseTools import *
 
 '''
@@ -605,7 +605,6 @@ class Dataset:
         return filePaths
 
 
-
     def _get_file_paths_from_multiple_sources(self, datetimeRange, dateTime=None, copy_if_not_exist=True, search_online=False, search_method='regular', **para):
         '''
         Parameters:
@@ -731,6 +730,74 @@ class Dataset:
         self.datetimeRange = datetimeRange
         self.variables_to_load = variableNames
         start, end = self.datetimeRange
+
+        if isinstance(self.dataset_file_time_gap, str) and self.dataset_file_time_gap == 'irregular':
+            filePaths = self._get_file_paths_from_multiple_sources(datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, search_method='irregular')
+            datetimeRanges = [datetimeRange]*len(filePaths)
+        else:
+            start_ = start
+            filePaths = []
+            datetimeRanges = []
+            while start_ < end:
+                beginOfTheFilePeriod, endOfTheFilePeriod = self._get_file_time_limits(start_)
+                logging.debug('begin/end of the file period: {}/{}'.format(beginOfTheFilePeriod, endOfTheFilePeriod))
+                if endOfTheFilePeriod >= end:
+                    datetimeRange_ = [start_, end]
+                else:
+                    datetimeRange_ = [start_, endOfTheFilePeriod]
+                filePaths_ = self._get_file_paths_from_multiple_sources(datetimeRange=datetimeRange_, dateTime=None, copy_if_not_exist=copy_if_not_exist, search_online=search_online)
+                if filePaths_:
+                    filePaths.append(filePaths_[0])
+                    datetimeRanges.append(datetimeRange_)
+                start_ = endOfTheFilePeriod
+        if not filePaths:
+            logging.debug('data file not found')
+        else:
+            variablesInADatasetOverDatetimeRange, variablesInADatasetIndependantOnTime, varInfoDict = self._load_data_from_files(filePaths, variableNames, datetimeRanges=datetimeRanges, sparse_factor=sparse_factor)
+            variables = {}
+            if len(variablesInADatasetOverDatetimeRange) > 0:
+                for var in variablesInADatasetOverDatetimeRange[0].keys():
+                    vardata_to_concatenate = [varsOfATimeRange[var] for varsOfATimeRange in variablesInADatasetOverDatetimeRange if varsOfATimeRange[var].size>0]
+                    if len(vardata_to_concatenate) > 0:
+                        variables[var] = np.concatenate(vardata_to_concatenate, axis=0)
+                    else:
+                        variables[var] = np.array([])
+                        logging.warning('no data found for {}'.format(var))
+            else:
+                logging.warning('no data over time found for this load of dataset')
+            # Checking no temporal overlap
+#            for var in variables.keys():
+#                if varInfoDict[var]['varInfo'].Data_Type in [31, 32, 33]:
+#                    # this variable is epoch
+#                    t_diff = np.diff(variables[var])
+            # Checking supporting data in all files are the same
+            for fileInd in range(len(variablesInADatasetIndependantOnTime)-1):
+                logging.debug(variablesInADatasetIndependantOnTime[fileInd].keys())
+                for key in variablesInADatasetIndependantOnTime[fileInd].keys():
+                    try:
+                        assert np.all(variablesInADatasetIndependantOnTime[fileInd][key] == variablesInADatasetIndependantOnTime[fileInd+1][key])
+                    except AssertionError as e:
+                        logging.warning('Supporting data for {} not same in {} and {}'.format(key, *filePaths[fileInd:fileInd+2]))
+                        if allow_nonidentital_supporting_data:
+                            pass
+                        else:
+                            raise AssertionError
+
+            variables.update(variablesInADatasetIndependantOnTime[0])
+            self.data = variables
+            self.varInfoDict = varInfoDict
+
+    def load_data_example(self, copy_if_not_exist=True, search_online=False, sparse_factor=None, allow_nonidentital_supporting_data=False):
+        '''
+        Parameter:
+            sparse_factor: When loading a large chunk of high resolution data it is sometimes ideal for the purpose of saving memory to take only one record, say, every 1000 records. If sparse_factor is None, the full data will be loaded. Otherwise it should be an integer such as 1000 to specify the step in loading data
+        '''
+        self.load_data_example = {}
+        self.varInfoDict = {}
+        self.datetimeRange_example = self.dataset_info.get('datetimeRange_example')
+        self.variables_to_load = variableNames
+        start, end = self.datetimeRange
+
 
         if isinstance(self.dataset_file_time_gap, str) and self.dataset_file_time_gap == 'irregular':
             filePaths = self._get_file_paths_from_multiple_sources(datetimeRange, copy_if_not_exist=copy_if_not_exist, search_online=search_online, search_method='irregular')
