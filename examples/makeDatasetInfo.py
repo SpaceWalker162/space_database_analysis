@@ -1,7 +1,16 @@
 import os
 import space_database_analysis.databaseTools as dbt
+import logging
 
 if __name__ == '__main__':
+    loggingHandlers = []
+    loggingHandlers.append(logging.StreamHandler())
+    formatter = logging.Formatter("%(asctime)s;%(levelname)s;%(message)s",
+                                  "%Y-%m-%d %H:%M:%S")
+    loggingHandlers[0].setFormatter(formatter)
+    logging.basicConfig(level=logging.WARNING, handlers=loggingHandlers)
+    logging.getLogger().setLevel(logging.INFO)
+
     databasePath = os.path.expanduser('~/Documents/remoteDatabase')
     database = dbt.Database([databasePath])
 

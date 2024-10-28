@@ -196,13 +196,18 @@ class Database:
     def add_example_time_interval_to_add_dataset_info(self):
         cdaswsObj = cdasws.CdasWs()
         self.load_additional_datasets_info()
+        logging.info('adding example time interval to additional dataset info')
         for datasetID, dataset in self.additional_datasets_info.items():
+            logging.info(datasetID+':')
             key_name = 'example_time_interval'
             if dataset.get(key_name) is not None:
+                logging.info('time interval exists, next')
                 continue
+            logging.info('looking for example time interval from cdaweb')
             timeInterval = cdaswsObj.get_example_time_interval(datasetID)
             dataset[key_name] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
             self.save_additinal_datasets_info()
+            logging.info('done')
 
     def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):
         '''
