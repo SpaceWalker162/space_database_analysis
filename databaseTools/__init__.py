@@ -149,9 +149,6 @@ class Database:
     def define_add_info(self, datasetID):
         dID = datasetID
         dataset = {'Id': dID}
-        cdaswsObj = cdasws.CdasWs()
-        timeInterval = cdaswsObj.get_example_time_interval(dID)
-        dataset['example_time_interval'] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
         if dID[:3] == 'MMS':
             dataset_path = os.path.join('mms', *dID.split('_')).lower()
             dataset.update({'dataset_path': dataset_path})
@@ -195,6 +192,17 @@ class Database:
                 dataset.update({'dataset_path': dataset_path})
 
         return dataset
+
+    def add_example_time_interval_to_add_dataset_info(self):
+        cdaswsObj = cdasws.CdasWs()
+        self.load_additional_datasets_info()
+        for datasetID, dataset in self.additional_datasets_info.items():
+            key_name = 'example_time_interval'
+            if dataset.get(key_name) is not None:
+                continue
+            timeInterval = cdaswsObj.get_example_time_interval(datasetID)
+            dataset[key_name] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
+            self.save_additinal_datasets_info()
 
     def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):
         '''
@@ -249,14 +257,8 @@ class Database:
                     with open(save_path, 'r') as f:
                         datasets_dic = json.load(f)
                     break
-        for path in self.paths:
-            add_info_file_path = os.path.join(path, self._database_additional_dataset_info_file_name)
-            if os.path.exists(add_info_file_path):
-                with open(add_info_file_path, 'r') as f:
-                    add_info = json.load(f)
-                break
-        else:
-            add_info = {}
+        self.load_additional_datasets_info()
+        add_info = self.additional_datasets_info
         for key, dataset in datasets_dic.items():
             dataset_add_info = self.define_add_info(key)
             if len(dataset_add_info) > 1:
@@ -322,6 +324,8 @@ class Database:
         if self.additional_datasets_info_paths:
             with open(self.additional_datasets_info_paths[0], 'r') as f:
                 self.additional_datasets_info = json.load(f)
+        else:
+            self.additional_datasets_info = {}
 
     def _check_exist_file(self, filename):
         try:
