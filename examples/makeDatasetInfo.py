@@ -5,8 +5,9 @@ if __name__ == '__main__':
     databasePath = os.path.expanduser('~/Documents/remoteDatabase')
     database = dbt.Database([databasePath])
 
-    ## to initialize, uncomment the following line and run
+    ## to initialize, uncomment the following lines and run
     database.make_additional_datasets_info()
+    database.add_example_time_interval_to_add_dataset_info()
     
     ## to add user defined information to datasets in the database use the following codes
     add_dic = {}
