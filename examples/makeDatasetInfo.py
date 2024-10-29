@@ -35,7 +35,7 @@ if __name__ == '__main__':
 #        dataset.update({'dataset_path': dataset_path})
 #        add_dic[datasetID] = dataset
 
-    for datasetID in ['WI_H0_MFI', 'WI_H0_SWE', 'WI_H1_SWE', 'WI_K0_SWE', 'WI_K0_3DP', 'WI_PLSP_3DP']:
+    for datasetID in ['WI_H0_MFI', 'WI_K0_3DP', 'WI_PLSP_3DP']:
         dataset = {'Id': datasetID}
         datasetID_com = datasetID.split('_')
         inst = datasetID_com[-1]

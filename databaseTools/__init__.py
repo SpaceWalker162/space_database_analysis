@@ -204,10 +204,15 @@ class Database:
                 logging.info('time interval exists, next')
                 continue
             logging.info('looking for example time interval from cdaweb')
+            datasetID = 'MMS1_FPI_FAST_L2_DIS-PARTMOMS'
             timeInterval = cdaswsObj.get_example_time_interval(datasetID)
-            dataset[key_name] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
-            self.save_additinal_datasets_info()
-            logging.info('done')
+            type(timeInterval)
+            if isinstance(timeInterval, cdasws.timeinterval.TimeInterval):
+                dataset[key_name] = [timeInterval._start.isoformat(), timeInterval._end.isoformat()]
+                self.save_additinal_datasets_info()
+                logging.info('done')
+            else:
+                logging.warning('failed in geting time interval from cdaweb')
 
     def define_dataset_file_naming_convention(self, datasetID, get_from_CDAWeb_metadata=False):
         '''
