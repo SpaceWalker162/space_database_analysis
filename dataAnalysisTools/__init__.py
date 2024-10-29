@@ -852,7 +852,7 @@ class Epochs:
             fm = self.standard_fm
         return self.data[fm]
 
-    def epochRecords(self, ts, fm='CDF_EPOCH', tolerance=1):
+    def epochRecords(self, ts, fm='CDF_TIME_TT2000', tolerance=1):
         '''
         Purposes:
             ts is a epoch series, this method finds the indices of the epoch series where the values are closest to the epochs in the Epochs object.

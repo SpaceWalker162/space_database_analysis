@@ -1244,7 +1244,7 @@ def readDataFromACdfFile(cdfFile=None, variables=None, datetimeRange=None, cdf_f
             else:
                 pass
             dataFromACdfFile[var] = varData
-        return dataFromACdfFile, varInfoDict
+        return dataFromACdfFile, {}, varInfoDict
 
 def readPDSData(fileName, dataFileExtension='.TAB', infoFileExtension='.xml', sep=None):
     '''
@@ -1549,20 +1549,22 @@ def update_datasets_info(databasePath, databaseBakPaths):
     '''
     once the additional_datasets_info is updated on the server, user should run this function on the user side to get the new additional_datasets_info
     '''
-    database = dbt.Database(databaseBakPaths)
-    for path in databaseBakPaths:
-        if path in database.additional_datasets_info_paths[0]:
-            databasePathBak = path
+    try:
+        database = dbt.Database(databaseBakPaths)
+        for path in databaseBakPaths:
+            if path in database.additional_datasets_info_paths[0]:
+                databasePathBak = path
 
-    filePath = database.additional_datasets_info_paths[0]
-    relpath = os.path.relpath(filePath, databasePathBak)
-    destFilePath = os.path.join(databasePath, relpath)
-    logging.debug('updating additional datasets info: rsync {} to {} ...'.format(filePath, destFilePath))
-    os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
-    cmdArgs = ['rsync', '--update', filePath, destFilePath]
-    process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    process.wait()
-    logging.info('dataset info updated')
+        filePath = database.additional_datasets_info_paths[0]
+        relpath = os.path.relpath(filePath, databasePathBak)
+        destFilePath = os.path.join(databasePath, relpath)
+        logging.debug('updating additional datasets info: rsync {} to {} ...'.format(filePath, destFilePath))
+        os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
+        cmdArgs = ['rsync', '--update', filePath, destFilePath]
+        process = subprocess.Popen(cmdArgs, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process.wait()
+        logging.info('dataset info updated')
+    except: logging.warning('failed in updating dataset info')
 
 
 def loadDatasets_info(databasePath, databaseBakPaths=None, copy_if_not_exist=True):
