@@ -1036,25 +1036,25 @@ def dataFillAndLowPass(t, data, axis=0, resamplingT=None, tDistribution='evenlyS
         return resampledData
 
 
-def linear_interpolate_array(x, xp, array, axis=0):
+def linear_interpolate_array(x_new, x_ori, array, axis=0):
     '''
     Parameters:
-        x: the new x coordinates after interpolation
-        xp: the x coordinate of array along axis=axis
-        axis: the axis of the array for coordinate x 
+        x_new: the new x coordinates after interpolation
+        x_ori: the x coordinate of array along axis=axis
+        axis: the axis of the array for coordinate x
     '''
     if len(array.shape) == 1:
-        return np.interp(x, xp, array)
-    assert len(xp) == array.shape[axis]
+        return np.interp(x_new, x_ori, array)
+    assert len(x_ori) == array.shape[axis]
     if axis != 0:
         array = array.swapaxes(axis, 0)
     shape_swaped = array.shape
     numberOfFunctions = np.prod(array.shape[1:])
-    array = array.reshape((len(xp), numberOfFunctions))
-    y = np.zeros((len(x), numberOfFunctions))
+    array = array.reshape((len(x_ori), numberOfFunctions))
+    y = np.zeros((len(np.atleast_1d(x_new)), numberOfFunctions))
     for ind in range(array.shape[1]):
-        y[:, ind] = np.interp(x, xp, array[:, ind])
-    y = y.reshape((len(x), *shape_swaped[1:]))
+        y[:, ind] = np.interp(x_new, x_ori, array[:, ind])
+    y = y.reshape((len(np.atleast_1d(x_new)), *shape_swaped[1:]))
     if axis != 0:
         y = y.swapaxes(axis, 0)
     return y
@@ -1359,16 +1359,19 @@ def unit_quaternion_spherical_linear_interpolation(tNew, tOri, q):
 quaternionFromMatrix = sppcoo.quaternionFromMatrix
 
 
-def angleBetweenVectors(v1, v2):
+def angleBetweenVectors(v1, v2, ignore_direction=False):
     '''
     Purpose:
         to calculate the angle in degrees between two vectors, v1 and v2
     Parameters:
         v1 and v2 are of same shape, ndarray(..., 3)
+        ignore_direction: v1 is deemed equivalent to -v1. Thus the angle is always less than 90 degrees.
     '''
     v1Unit = v1 / np.linalg.norm(v1, axis=-1)[..., None]
     v2Unit = v2 / np.linalg.norm(v2, axis=-1)[..., None]
     angle = np.arccos(np.sum(v1Unit * v2Unit, axis=-1))/np.pi*180
+    if ignore_direction:
+        angle = np.abs(180 * (np.sign(angle - 90 - 10**(-31)) + 1)/2 - angle)
     return angle
 
 

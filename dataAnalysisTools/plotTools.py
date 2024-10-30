@@ -69,20 +69,44 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
         return plot_
 mpl.axes.Axes.plot_time_series = plot_time_series
 
+def plot_multiple_time_series(self, t, data, labels, **kwargs):
+    '''
+    Parameters:
+        t: a list of 1d array
+        data: a list of 1d array
+    '''
+    prop_cycle = plt.rcParams['axes.prop_cycle']
+    colors = prop_cycle.by_key()['color'][:len(data)]
 
-def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
+    for ind in range(len(data)):
+        self.plot_time_series(t[ind], data[ind], color=colors[ind], label=labels[ind], **kwargs)
+
+    y_major = mpl.ticker.MaxNLocator(nbins=4, symmetric=True, min_n_ticks=4)
+    self.yaxis.set_major_locator(y_major)
+    self.grid(True)
+
+    labelHeight = 0.2
+    vectorLabelX = 1.01
+    vectorLabelPos = np.zeros((4, 2))
+    vectorLabelPos[:, 0] = vectorLabelX
+    vectorLabelPos[:, 1] = 0.85 - np.arange(0, 4) * labelHeight
+    for ind in range(len(labels)):
+        self.text(vectorLabelPos[ind, 0], vectorLabelPos[ind, 1], s=labels[ind], color=colors[ind], transform=self.transAxes)
+mpl.axes.Axes.plot_multiple_time_series = plot_multiple_time_series
+
+def plotCartesianVectorTimeSeries(self, t, data, norm=True, label=None, **kwargs):
     labelsF = ['${}_x$', '${}_y$', '${}_z$']
     colors = ['m', 'g', 'b']
     if label:
         labels = [labelF.format(label) for labelF in labelsF]
     for ind in range(3):
-        ax.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
+        self.plot_time_series(t, data[:, ind], color=colors[ind], label=labels[ind], **kwargs)
     if norm:
-        ax.plot_time_series(t, np.linalg.norm(data[..., :3], axis=-1), color='k', label=label, **kwargs)
+        self.plot_time_series(t, np.linalg.norm(data[..., :3], axis=-1), color='k', label=label, **kwargs)
     y_major = mpl.ticker.MaxNLocator(nbins=4, symmetric=True, min_n_ticks=4)
-    ax.yaxis.set_major_locator(y_major)
-    ax.set_ylabel(label)
-    ax.grid(True)
+    self.yaxis.set_major_locator(y_major)
+    self.set_ylabel(label)
+    self.grid(True)
 
     labelHeight = 0.2
     vectorLabelX = 1.01
@@ -91,9 +115,9 @@ def plotCartesianVectorTimeSeries(ax, t, data, norm=True, label=None, **kwargs):
     vectorLabelPos[:, 1] = 0.85 - np.arange(0, 4) * labelHeight
 
     for ind in range(3):
-        ax.text(vectorLabelPos[ind, 0], vectorLabelPos[ind, 1], s=labels[ind], color=colors[ind], transform=ax.transAxes)
-    ax.text(vectorLabelPos[3, 0], vectorLabelPos[3, 1], s='$'+label+'$', color='k', transform=ax.transAxes)
-    return ax
+        self.text(vectorLabelPos[ind, 0], vectorLabelPos[ind, 1], s=labels[ind], color=colors[ind], transform=self.transAxes)
+    self.text(vectorLabelPos[3, 0], vectorLabelPos[3, 1], s='$'+label+'$', color='k', transform=self.transAxes)
+mpl.axes.Axes.plotCartesianVectorTimeSeries = plotCartesianVectorTimeSeries
 
 
 def plotVerticalLinesAcrossMultiplePanels(fig, axes, epochs, notations=None, color='k', coordinates='fig'):
