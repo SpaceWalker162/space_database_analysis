@@ -209,6 +209,7 @@ class bowShockAndMagnetopausePositionModels:
                      'GruesBeck18MarsBS': {'modelType': 'secondOrderSurface'},
                      'Went11': {'modelType': 'conicSection'},
                      'Kanani10': {'modelType': 'conicSection'},
+                     'Shue98': {'modelType': 'conicSection'},
                      }
         self.modelDict = modelDict
         if wlPath is not None:
@@ -227,6 +228,8 @@ class bowShockAndMagnetopausePositionModels:
             initWent11Model(self.wlSession, **self.modelParas)
         elif self.modelName == 'Kanani10':
             initKanani10Model(self.wlSession, **self.modelParas)
+        elif self.modelName == 'Shue98':
+            initShue98Model(self.wlSession, **self.modelParas)
         elif self.modelName == 'GruesBeck18MarsBS':
             initGruesBeck18MarsBSModel(self.wlSession)
 
@@ -389,6 +392,28 @@ def initKanani10Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
              '''.format(r0=r0, K=K, x0=x0, y0=y0, z0=z0)
     wlSession.evaluate(initModelCMD)
 
+
+def initShue98Model(wlSession, Bz=None, dynamicPressure=None, origin=np.zeros(3)):
+    '''
+    Purpose: obtain the location of terrestrial magnetopause using the model doi:10.1029/98JA01103. The coordinate system is GSM/GSE system (I am not sure).
+    Parameters:
+        wlSession: a wolframe session
+        Bz: in nT
+        dynamicPressure: upstream solar wind dynamic pressure in nPa
+        origin: the origin of the coordinate system in the unit of R_J
+    '''
+    x0, y0, z0 = origin
+    r0 = (10.22 + 1.29*np.tanh(0.184 * (Bz + 8.14))) * dynamicPressure**(-1/6.6)
+    alpha = (0.58 - 0.007*Bz) * (1+0.024*np.log(dynamicPressure))
+    initModelCMD = '''rInTheta = {r0} (2 / (1 + Cos[theta]))^{alpha};
+                      eqRT = r - {r0} (2 / (1 + Cos[theta]))^{alpha};
+                      eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
+                      eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
+                      eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+             '''.format(r0=r0, alpha=alpha, x0=x0, y0=y0, z0=z0)
+    wlSession.evaluate(initModelCMD)
+
+
 def initGruesBeck18MarsBSModel(wlSession, origin=np.zeros(3)):
     '''
     Purpose: obtain the location of Kronian magnetopause using the model doi:10.1029/2018JA025366. The coordinate system is MSO system.
@@ -421,3 +446,21 @@ def initGruesBeck18MarsBSModel(wlSession, origin=np.zeros(3)):
 #        stringList.append('{a}p={a}p'.format(a=chr(ord('A') + i)))
 #    string = ', '.join(stringList)
 #    print(string)
+
+
+
+class shue98MPModel:
+    '''This is deprecated, use the mathematica model'''
+    def __init__(self, Dp, Bz):
+        '''
+        see doi:10.1029/98JA01103 for detail
+        Parameters:
+            Bz: magnetic field in nT
+            Dp: dynamic pressure in nPa
+        '''
+        self.r0 = (10.22 + 1.29*np.tanh(0.184 * (Bz + 8.14))) * Dp**(-1/6.6)
+        self.alpha = (0.58 - 0.007*Bz) * (1+0.024*np.log(Dp))
+
+    def get_r(self, theta, phi):
+        r = self.r0 * (2/(1+np.cos(theta)))**self.alpha
+        return r

@@ -81,7 +81,7 @@ def plot_multiple_time_series(self, t, data, labels, **kwargs):
     for ind in range(len(data)):
         self.plot_time_series(t[ind], data[ind], color=colors[ind], label=labels[ind], **kwargs)
 
-    y_major = mpl.ticker.MaxNLocator(nbins=4, symmetric=True, min_n_ticks=4)
+    y_major = mpl.ticker.MaxNLocator(nbins=4, min_n_ticks=4)
     self.yaxis.set_major_locator(y_major)
     self.grid(True)
 

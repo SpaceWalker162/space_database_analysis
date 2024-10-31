@@ -2071,3 +2071,32 @@ def angle_factors_in_integrating_2nd_moment(theta_bound, phi_bound, axis=['xx', 
         elif np.all(phi_diff > 0): pass
         else: raise Exception('Unexpected order of phi_bound')
         return sign * (theta_func(theta_bound[1:]) - theta_func(theta_bound[:-1]))[..., None] * (phi_func(phi_bound[1:]) - phi_func(phi_bound[:-1]))[None, :]
+
+
+def pearson_correlation_coefficient(x, y):
+    '''
+    Parameters:
+        x: 1d array or 2d array with the first axis representing observations and the second representing different variables.
+        y: same shape as x
+    '''
+    x_ = x - np.mean(x, axis=0)
+    y_ = y - np.mean(y, axis=0)
+    return np.mean(x_ * y_, axis=0) / (np.linalg.norm(x_, axis=0) * np.linalg.norm(y_, axis=0) / len(x_))
+
+def shifted_pearson_correlation_coefficient(x, y):
+    '''
+    Purpose:
+        this function is for finding the timing lag between data obtained by two spacecraft
+    Parameters:
+        x: the shorter one. [observation_number, variable_number]
+        y: the longer one. [more_observation_number, variable_number]
+    Return:
+        rho: the correlation coefficient of length len(y) - len(x) + 1. rho[i] = pearson_correlation_coefficient(x, y[i:len(x)+i])
+    '''
+    obsN = len(x)
+    obsN_y = len(y)
+    rhoN = obsN_y-obsN+1
+    x_ = np.repeat(x[..., None], rhoN, axis=-1).reshape((obsN, -1))
+    y_ = np.swapaxes(np.lib.stride_tricks.sliding_window_view(y, obsN, axis=0), axis1=0, axis2=-1).reshape((obsN, -1))
+    rho = pearson_correlation_coefficient(x_, y_).reshape((-1, rhoN))
+    return rho
