@@ -241,17 +241,24 @@ def moving_average(data, n=1, axis=0):
         ret = np.swapaxes(ret, axis, 0)
     return ret
 
-def data_synchronization(data_list, t_list, minimum_gap_ratio=1.5, minimum_gap_abs=None):
+def data_synchronization(data_list, t_list, minimum_gap_ratio=1.5, minimum_gap_abs=None, resamplingT=None, return_data_list=True):
     '''
     Purpose:
         pass
     '''
-    resamplingT = define_synchronized_t(t_list=t_list, minimum_gap_ratio=minimum_gap_ratio, minimum_gap_abs=minimum_gap_abs)
-    data_array = np.zeros((len(resamplingT), len(data_list), *data_list[0].shape[1:]))
+    if resamplingT is None:
+        resamplingT = define_synchronized_t(t_list=t_list, minimum_gap_ratio=minimum_gap_ratio, minimum_gap_abs=minimum_gap_abs)
+    resampled_data_list = []
     for data_ind, data in enumerate(data_list):
         t = t_list[data_ind]
-        data_array[:, data_ind] = dataFillAndLowPass(t, data, resamplingT=resamplingT)
-    return resamplingT, data_array
+        resampled_data_list.append(dataFillAndLowPass(t, data, resamplingT=resamplingT))
+    if return_data_list:
+        return resamplingT, resampled_data_list
+    else:
+        data_array = np.zeros((len(resamplingT), len(data_list), *data_list[0].shape[1:]))
+        for data_ind, data in enumerate(data_list):
+            data_array[:, data_ind] = resampled_data_list[data_ind]
+        return resamplingT, data_array
 
 def define_synchronized_t(t_list, minimum_gap_ratio=1.5, minimum_gap_abs=None):
     stdInd = np.argmin(np.array([len(t) for t in t_list]))
@@ -415,6 +422,52 @@ def gradOfVectors(vectors, x, method='Harvey'):
         gradOfV = grad(vectors, x)
     return gradOfV
 
+def electric_current_from_magetic_measurement(x, B, grad_method='Zhou', unit_str='mA/km^2'):
+    '''
+    Parameters:
+        x: use astropy quantity, x and B should be are synchronized and be of [numberOfEvents, numberOfMeasurementPoints, 3]
+        B: use astropy quantity
+    Examples:
+        data_list = []
+        t_list = []
+        std_source = 'FGM'
+        dataName = 'B'
+        x_source = 'MEC89Q'
+        unit_str = 'mA/km^2'
+        for spacecraft in spacecrafts:
+            t_list.extend([spacecraft.data[std_source]['t'], spacecraft.data[x_source]['t']])
+            data_list.extend([spacecraft.data[std_source][dataName], spacecraft.data[x_source]['x']])
+        resamplingT = t_list[0]
+        resamplingT, resampled_data_list = dat.data_synchronization(data_list, t_list, resamplingT=resamplingT)
+        B = np.concatenate([d[:, None, ...] for d in resampled_data_list[::2]], axis=1)[..., :3] * u.nT
+        x = np.concatenate([d[:, None, ...] for d in resampled_data_list[1::2]], axis=1) * u.km
+        data = j_mag = dat.electric_current_from_magetic_measurement(x, B, grad_method='Zhou', unit_str='mA/km^2')
+    '''
+    #field_dict_list = [{'t': spacecraft.data[std_source]['t'], 'f': spacecraft.data[std_source][dataName]} for spacecraft in spacecrafts]
+    #x_dict_list = [{'t': spacecraft.data[x_source]['t'], 'x': spacecraft.data[x_source][dataName]} for spacecraft in spacecrafts]
+    #for scInd in range(len(spacecrafts)):
+    #    field_dict = field_dict_list[scInd]
+    #    x_dict = x_dict_list[scInd]
+    #    x = dat.linear_interpolate_array(field_dict['t'], x_dict['t'], x_dict['x'])
+    #    data_list.append(np.concatenate((field_dict['f'], x), axis=-1))
+    #    t_list.append(field_dict['t'])
+    return curl(B.to('nT').value, x.to('km').value, d=1) * (u.nT/u.km / const.mu0).to(unit_str)
+
+
+def electric_current_from_plasma_measurement(electron, proton, unit_str='mA/km^2'):
+    '''
+    Purpose:
+        to calculate electric current from \sum_{s=p,e} n_s q_s \vec{v}_s
+    Parameters:
+        electron: a dict containing three keys 't', 'n', and 'v'
+        proton: a dict containing three keys 't', 'n', and 'v'
+        unit_str: the units of returned data 
+    '''
+    data = np.concatenate((electron['v'], electron['n'][:, None]), axis=-1)
+    data_t_p = linear_interpolate_array(proton['t'], electron['t'], data)
+    v_e = data_t_p[:, :3]
+    n_e = data_t_p[:, 3]
+    return (proton['n'][:, None] * proton['v'] - n_e[:, None] * v_e) * (u.cm**(-3) * u.km/u.s * const.e.si).to(unit_str)
 
 def timingVelocityAndNormal(t, xGSE, silence=False, getShape=False):
     m = timing(t, xGSE, getShape=getShape)
@@ -1383,7 +1436,7 @@ def leastSquarePolynomialApproximation(j, x, d, omega=None, regularizationMethod
     '''
     This Function do something
     Parameters:
-        j: the sampled data of dimension [..., M, s] where M is the number of samples, s is the number of the functions
+        j: the sampled data of dimension [..., M, s] where M is the number of samples, s is the number of functions
         x: the sampling nodes of dimension [..., M, r] where r is the number of variables of the sampled function
         d: the total degree of the polynomial
         omega: the weight matrix

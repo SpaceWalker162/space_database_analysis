@@ -197,19 +197,46 @@ def J05ReferenceR(theta, phi, a11 = 0.45, a22 = 1, a33 = 0.8, a12 = 0.18, a14 = 
 
 
 class bowShockAndMagnetopausePositionModels:
-    def __init__(self, wlPath=None, modelName=None, **modelParas):
+    '''
+    ToDo: change initializing programs to initialize the models without modelParas. The modelParas should be provided when calling calculatePosition
+
+    '''
+    def __init__(self, wlPath=None, modelName=None, verbose=True, **modelParas):
         self.modelName = modelName
+        self.verbose = verbose
         '''
         Parameters:
             wlPath: the path to wolframkernel, for example, '/usr/local/Wolfram/Mathematica/12.0/Executables/WolframKernel'
             modelName: Joy02BS, Joy02MP (doi:10.1029/2001JA009146)
         '''
-        modelDict = {'Joy02BS': {'modelType': 'secondOrderSurface'},
-                     'Joy02MP': {'modelType': 'secondOrderSurface'},
-                     'GruesBeck18MarsBS': {'modelType': 'secondOrderSurface'},
-                     'Went11': {'modelType': 'conicSection'},
-                     'Kanani10': {'modelType': 'conicSection'},
-                     'Shue98': {'modelType': 'conicSection'},
+        modelDict = {'Joy02BS': {
+                         'modelType': 'secondOrderSurface',
+                         'initial_guess': 100, # guess of root for faster solving for r
+                                 },
+                     'Joy02MP': {
+                         'modelType': 'secondOrderSurface',
+                         'initial_guess': 80, # guess of root for faster solving for r
+                         },
+                     'GruesBeck18MarsBS': {
+                         'modelType': 'secondOrderSurface',
+                         'initial_guess': 1.5, # guess of root for faster solving for r
+                         },
+                     'Went11': {
+                         'modelType': 'conicSection',
+                         'initial_guess': 30, # guess of root for faster solving for r
+                         },
+                     'Kanani10': {
+                         'modelType': 'conicSection',
+                         'initial_guess': 20, # guess of root for faster solving for r
+                         },
+                     'Shue98': {
+                         'modelType': 'conicSection',
+                         'initial_guess': 10, # guess of root for faster solving for r
+                         },
+                     'J05': {
+                         'modelType': 'secondOrderSurface',
+                         'initial_guess': 20, # guess of root for faster solving for r
+                         },
                      }
         self.modelDict = modelDict
         if wlPath is not None:
@@ -217,6 +244,7 @@ class bowShockAndMagnetopausePositionModels:
             self.modelParas = modelParas
 #        if self.modelName in ['Joy02BS', 'Joy02MP', 'Went11', 'Kanani10']:
         self.modelType = self.modelDict[self.modelName]['modelType']
+        self.initial_guess = self.modelDict[self.modelName]['initial_guess']
         self.initMathematicaModel()
 
     def initMathematicaModel(self):
@@ -229,12 +257,14 @@ class bowShockAndMagnetopausePositionModels:
         elif self.modelName == 'Kanani10':
             initKanani10Model(self.wlSession, **self.modelParas)
         elif self.modelName == 'Shue98':
-            initShue98Model(self.wlSession, **self.modelParas)
+            initShue98Model(self.wlSession, verbose=self.verbose)
+        elif self.modelName == 'J05':
+            initJ05Model(self.wlSession, verbose=self.verbose)
         elif self.modelName == 'GruesBeck18MarsBS':
             initGruesBeck18MarsBSModel(self.wlSession)
 
 #    def calculatePosition(self, pos, toCal='r', returnR=True, returnXYZ=False):
-    def calculatePosition(self, pos, toCal='r'):
+    def calculatePosition(self, pos, toCal='r', calCMD=None, **modelParas):
         '''
         Parameters:
             pos: position, an array of [..., n]. The last dimension is represent the known parameters for a point.
@@ -252,12 +282,13 @@ class bowShockAndMagnetopausePositionModels:
             pos_ = np.array([[pos]])
         numberOfPoints = len(pos_)
         posLastEles = np.zeros(numberOfPoints)
+
         if self.modelType == 'secondOrderSurface':
             for ind in range(numberOfPoints):
                 if toCal == 'r':
                     theta = pos_[ind, 0]
                     phi = pos_[ind, 1]
-                    posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi)
+                    posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi, calCMD=calCMD, **modelParas)
                     posLastEles[ind] = posLastEle_
                 elif toCal == 'z':
                     x = pos_[ind, 0]
@@ -276,7 +307,7 @@ class bowShockAndMagnetopausePositionModels:
                     elif shape[-1] == 2:
                         theta = pos_[ind, 0]
                         phi = pos_[ind, 1]
-                        posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi)
+                        posLastEle_ = self.calculateRFromThetaPhi(theta=theta, phi=phi, calCMD=calCMD, **modelParas)
                     posLastEles[ind] = posLastEle_
                 elif toCal == 'z':
                     x = pos_[ind, 0]
@@ -290,22 +321,38 @@ class bowShockAndMagnetopausePositionModels:
         posLastEles = posLastEles.reshape(shape[:-1])
         return posLastEles
 
-    def calculateRFromThetaPhi(self, theta, phi):
-        logging.info('theta: {}'.format(theta))
-        logging.info('phi: {}'.format(phi))
-        wlCMD = '''r /. NSolve[(eqRTPAtOriginXYZ0 == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]
-        '''.format(theta=theta, phi=phi)
-        wlResult = self.wlSession.evaluate(wlCMD)
+    def calculateRFromThetaPhi(self, theta, phi, calCMD=None, **modelParas):
+        '''
+        Parameters:
+            calCMD: Due to the complexity of the equation eqRTPAtOriginXYZ0WithModelParas == 0, NSolve or FindRoot may be used when the other one fails. Possible commands include
+                calCMD = 'r /. NSolve[(eqRTPAtOriginXYZ0WithModelParas == 0)/.{{\[Theta]->{theta}, \[Phi]->{phi}}}, r, Reals]'.format(theta=theta, phi=phi)
+                calCMD = 'r /. NSolve[(eqRTPAtOriginXYZ0WithModelParas == 0), r, Reals]'
+                calCMD = 'r /. FindRoot[(eqRTPAtOriginXYZ0WithModelParas == 0), {{r, {}}}]'.format(self.initial_guess)
+                calCMD = 'r /. FindRoot[(eqRTPAtOriginXYZ0WithModelParas == 0), {{r, {}}}, WorkingPrecision->50]'.format(self.initial_guess)
+        '''
+        logging.debug('theta: {}'.format(theta))
+        logging.debug('phi: {}'.format(phi))
+        for varname in ['x0', 'y0', 'z0']:
+            if not modelParas.get(varname):
+                modelParas[varname] = 0
+        model_replace_cmd = 'eqRTPAtOriginXYZ0WithModelParas = eqRTPAtOriginXYZ0/.{{' + ', '.join(['''{key}->{value}'''.format(key=key, value=value) for key, value in modelParas.items()]) + '}}' + '/.{{\[Theta]->{theta}, \[Phi]->{phi}}}'.format(theta=theta, phi=phi) + ';'
+        logging.debug(model_replace_cmd)
+        self.wlSession.evaluate(model_replace_cmd)
+        if calCMD is None:
+            calCMD = 'r /. NSolve[(eqRTPAtOriginXYZ0WithModelParas == 0), r, Reals]'
+        logging.debug(calCMD)
+        wlResult = self.wlSession.evaluate(calCMD)
+        logging.debug('found result: '+str(wlResult))
         if isinstance(wlResult, wolframclient.language.expression.WLSymbol):
             logging.warning('not found posLastEle_, but found:')
             logging.warning(wlResult)
             posLastEle_ = None
         else:
             posLastEle_ = np.array(wlResult).squeeze()
-            logging.info('posLastEle_')
-            logging.info(posLastEle_)
+            logging.debug('posLastEle_')
+            logging.debug(posLastEle_)
             posLastEle_ = np.where(posLastEle_ < 10**10, posLastEle_, np.zeros_like(posLastEle_))
-            assert np.count_nonzero(posLastEle_ > 0) == 1 
+            assert np.count_nonzero(posLastEle_ > 0) >= 1
             posLastEle_ = np.max(posLastEle_)
         return posLastEle_
 
@@ -393,25 +440,68 @@ def initKanani10Model(wlSession, dynamicPressure=None, origin=np.zeros(3)):
     wlSession.evaluate(initModelCMD)
 
 
-def initShue98Model(wlSession, Bz=None, dynamicPressure=None, origin=np.zeros(3)):
+def initShue98Model(wlSession, verbose=True):
     '''
     Purpose: obtain the location of terrestrial magnetopause using the model doi:10.1029/98JA01103. The coordinate system is GSM/GSE system (I am not sure).
     Parameters:
         wlSession: a wolframe session
         Bz: in nT
         dynamicPressure: upstream solar wind dynamic pressure in nPa
-        origin: the origin of the coordinate system in the unit of R_J
+        origin: the origin of the coordinate system in the unit of R_E
     '''
-    x0, y0, z0 = origin
-    r0 = (10.22 + 1.29*np.tanh(0.184 * (Bz + 8.14))) * dynamicPressure**(-1/6.6)
-    alpha = (0.58 - 0.007*Bz) * (1+0.024*np.log(dynamicPressure))
-    initModelCMD = '''rInTheta = {r0} (2 / (1 + Cos[theta]))^{alpha};
-                      eqRT = r - {r0} (2 / (1 + Cos[theta]))^{alpha};
-                      eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
-                      eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+{x0}, y->y+{y0}, z->z+{z0}}};
-                      eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
-             '''.format(r0=r0, alpha=alpha, x0=x0, y0=y0, z0=z0)
+    initModelCMD = '''
+          r0 = (10.22 + 1.29 Tanh[0.184 (Bz + 8.14)]) dynamicPressure^(-1/6.6)
+          alpha = (0.58 - 0.007 Bz) (1 + 0.024 Log[dynamicPressure])
+          rInTheta = r0 (2 / (1 + Cos[theta]))^alpha;
+          eqRT = r - r0 (2 / (1 + Cos[theta]))^alpha;
+          eqXYZ = eqRT /. {{r -> Sqrt[x^2 + y^2 + z^2], Cos[theta] -> x/Sqrt[x^2 + y^2 + z^2]}};
+          eqXYZAtOriginXYZ0 = eqXYZ /. {{x->x+x0, y->y+y0, z->z+z0}};
+          eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+             '''
     wlSession.evaluate(initModelCMD)
+    msg = '''
+    Shue98Model initialized, input model parameters:
+        Bz: in nT
+        dynamicPressure: upstream solar wind dynamic pressure in nPa
+        x0: origin in GSE x-coordinate, R_E
+        y0: origin in GSE y-coordinate, R_E
+        z0: origin in GSE z-coordinate, R_E
+        '''
+    if verbose:
+        print(msg)
+
+
+def initJ05Model(wlSession, verbose=True):
+    '''
+    see doi:10.1016/j.pss.2004.09.032 for detail
+    Parameters:
+        B: in nT
+        n: in cm^{-3}
+        v: in km/s
+    '''
+    initModelCMD = '''
+           alfvenmachNumber = v / (21.812 B / Sqrt[n] );
+           refsurface = a11 x^2 + a22 y^2 + a33 z^2 + a12 x y + a14 x + a24 y + a34 z + a44 /. {{a11 -> 0.45, a22 -> 1, a33 -> 0.8, a12 -> 0.18, a14 -> 46.6, a24 -> -2.2, a34 -> -0.6, a44 -> -618}} /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}}
+            sol = Solve[refsurface == 0, r];
+            rav = r /. sol[[2]];
+            r0 = rav /. {{\[Theta] -> Pi/2, \[Phi] -> 0}};
+            surface = (r - rav/r0 c/(n v^2)^( 1/6) (1 + d ((gamma - 1) alfvenmachNumber^2 + 2 )/((gamma + 1) (alfvenmachNumber^2 - 1))) /. {{d -> 0.937 (0.846 + 0.042 B), c -> 91.55, gamma -> 5/3}});
+            eqXYZ = surface /. {{r -> Sqrt[x^2 + y^2 + z^2], \[Theta] -> ArcCos[z/Sqrt[x^2 + y^2 + z^2]], \[Phi] -> ArcCos[x/Sqrt[x^2 + y^2]]}};
+            eqXYZAtOriginXYZ0 = eqXYZ /. {{x -> x + x0, y -> y + y0, z -> z + z0}};
+            eqRTPAtOriginXYZ0 = eqXYZAtOriginXYZ0 /. {{x -> r Sin[\[Theta]] Cos[\[Phi]], y -> r Sin[\[Theta]] Sin[\[Phi]], z -> r Cos[\[Theta]]}};
+             '''
+    wlSession.evaluate(initModelCMD)
+    msg = '''
+    Shue98Model initialized, input model parameters:
+        B: in nT
+        n: in cm^{-3}
+        v: in km/s
+        x0: origin in GSE x-coordinate, R_E
+        y0: origin in GSE y-coordinate, R_E
+        z0: origin in GSE z-coordinate, R_E
+        '''
+    if verbose:
+        print(msg)
 
 
 def initGruesBeck18MarsBSModel(wlSession, origin=np.zeros(3)):
@@ -461,6 +551,6 @@ class shue98MPModel:
         self.r0 = (10.22 + 1.29*np.tanh(0.184 * (Bz + 8.14))) * Dp**(-1/6.6)
         self.alpha = (0.58 - 0.007*Bz) * (1+0.024*np.log(Dp))
 
-    def get_r(self, theta, phi):
+    def get_r(self, theta):
         r = self.r0 * (2/(1+np.cos(theta)))**self.alpha
         return r

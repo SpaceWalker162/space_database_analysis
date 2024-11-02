@@ -640,7 +640,7 @@ def add_summary_brackets_to_axes(fig, axes, text, gap_between_bracket_and_axes):
     points = np.stack([p1, p2, p3, p4])
     fig.add_artist(mpl.lines.Line2D(*points.T, color='k', ls='-'))
     text_pos = (p2 + p3)/2
-    fig.text(x=text_pos[0] - figInv.transform(np.array([gap_between_text_and_bracket, 0]))[0], y=text_pos[1], s=text, transform=fig.transFigure, horizontalalignment='right', verticalalignment='center')
+    fig.text(x=text_pos[0] - figInv.transform(np.array([gap_between_text_and_bracket, 0]))[0], y=text_pos[1], s=text, transform=fig.transFigure, horizontalalignment='right', verticalalignment='center', rotation=90)
 
 def find_best_round_gap_for_time_ticks(datetimeRange, ticks_N=6):
     possible_gaps_seconds = np.array([1, 2, 6, 10, 20, 30, 40])
@@ -752,3 +752,11 @@ def plot_flag_bar(fig, ax, epochs, data, epoch_fmt='CDF_TIME_TT2000', vmin=None,
     if cbar_tickAndLabels is not None:
         cbar.set_ticks(**cbar_tickAndLabels)
     ax.set_ylabel(ylabel)
+
+def plot_with_arrowhead(self, x, y, plot_kwargs=None, arrow_kwargs=None):
+    xy = np.vstack((x, y))
+    self.plot(x, y, **plot_kwargs)
+    arrowStart = xy[:, -1]
+    arrowVector = xy[:, -1] - xy[:, -2]
+    self.arrow(x=arrowStart[0], y=arrowStart[1], dx=arrowVector[0], dy=arrowVector[1], **arrow_kwargs)
+mpl.axes.Axes.plot_with_arrowhead = plot_with_arrowhead
