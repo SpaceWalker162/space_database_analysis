@@ -17,7 +17,8 @@ import json
 import cdasws
 import functools
 from urllib.parse import urlparse
-from urllib.request import urlretrieve
+import urllib3
+import contextlib
 import struct
 from pprint import pprint
 from scipy.signal import butter, lfilter, freqz
@@ -619,7 +620,7 @@ class Dataset:
             logging.debug('looking for file with string criteria: {}'.format(search_criteria['strings']))
         elif search_method == 'irregular':
             search_func = findFileNamesInTimeRange
-            timedeltas = [-timedelta(seconds=3600*6), timedelta(seconds=3600*6)]
+            timedeltas = [-timedelta(seconds=3600*1), timedelta(seconds=3600*1)]
             search_criteria = {'timeRange': [datetime_+timedelta_ for datetime_, timedelta_ in zip(datetimeRange, timedeltas)], 'getTimeFromNameFunc': getTimeFromName, 'strings': [self.datasetID.lower()]}
             logging.debug('looking for file with string criteria: {} in datetime range {}/{}'.format(search_criteria['strings'], *search_criteria['timeRange']))
 
@@ -670,7 +671,12 @@ class Dataset:
             destFilePath = os.path.join(self.database.path, filePathInDatabase)
             os.makedirs(os.path.dirname(destFilePath), exist_ok=True)
             logging.info('downloading {}\n from {}'.format(destFilePath, fileURL))
-            urlretrieve(fileURL, destFilePath)
+            http = urllib3.PoolManager()
+            blocksize = 32768
+            with open(destFilePath, 'wb') as f:
+                with contextlib.closing(http.request("GET", fileURL, preload_content=False)) as resp:
+                    for chunk in resp.stream(blocksize):
+                        f.write(chunk)
             logging.info('downloaded')
             return destFilePath
 
@@ -1009,12 +1015,9 @@ def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, str
         strings: a list of strings that should be contained in the objective file name.
         size: a string in the form of "<num" or ">num", where num is an integer whose unit is bytes. This parameter define either that the size of the file should be less than num bytes, or that its size greater than num bytes. The default value for this parameter is "allSize" which allow for all file size.
     '''
-    logging.debug('find name in time range:')
-    logging.debug(timeRange)
-    if os.path.exists(path):
+    def select_based_on_size(path, size='allSize', ext='.cdf'):
         with os.scandir(path) as it:
             fileNamesMeetingSize = []
-            foundFileNames = []
             for entry in it:
                 if entry.is_file():
                     _, fileExt = os.path.splitext(entry.name)
@@ -1027,33 +1030,47 @@ def findFileNamesInTimeRange(path, timeRange=None, getTimeFromNameFunc=None, str
                     elif size == 'allSize':
                         fileNamesMeetingSize.append(entry.name)
             logging.debug("number of files with extension {ext} and meeting size criterion: {nf}".format(ext=ext, nf=len(fileNamesMeetingSize)))
-        fileNamesAfterSelection_ = fileNamesMeetingSize
-        if strings:
-            fileNamesAfterSelection = []
-            if not isinstance(strings[0], list):
-                logging.debug("string criteria for searching:")
-                logging.debug(strings)
-                while fileNamesAfterSelection_:
-                    fileName_ = fileNamesAfterSelection_.pop(0)
+        return fileNamesMeetingSize
+
+    def select_based_on_name_strings(fileNames, strings):
+        fileNamesAfterSelection = []
+        if not isinstance(strings[0], list):
+            logging.debug("string criteria for searching:")
+            logging.debug(strings)
+            while fileNames:
+                fileName_ = fileNames.pop(0)
+                if all(string in fileName_ for string in strings):
+                    fileNamesAfterSelection.append(fileName_)
+        else:
+            while fileNames:
+                fileName_ = fileNames.pop(0)
+                for stringList in strings:
                     if all(string in fileName_ for string in strings):
                         fileNamesAfterSelection.append(fileName_)
-            else:
-                while fileNamesAfterSelection_:
-                    fileName_ = fileNamesAfterSelection_.pop(0)
-                    for stringList in strings:
-                        if all(string in fileName_ for string in strings):
-                            fileNamesAfterSelection.append(fileName_)
-                            break
-            fileNamesAfterSelection_ = fileNamesAfterSelection
+                        break
+        return fileNamesAfterSelection
+
+    def select_based_on_name_time(fileNames, timeRange=None):
         fileNamesAfterSelection = []
-        for fileName in fileNamesAfterSelection_:
+        for fileName in fileNames:
             datetimeOfFile = getTimeFromNameFunc(fileName)
             if datetimeOfFile >= timeRange[0] and datetimeOfFile <= timeRange[1]:
                 fileNamesAfterSelection.append(fileName)
+        return fileNamesAfterSelection
+
+    logging.debug('To find name in time range: {}/{} in {}'.format(*timeRange, path))
+    if os.path.exists(path):
+        fileNamesAfterSelection = select_based_on_size(path, size=size)
+        if strings:
+            if len(fileNamesAfterSelection) > 0:
+                fileNamesAfterSelection = select_based_on_name_strings(fileNamesAfterSelection, strings=strings)
+        if len(fileNamesAfterSelection) > 0:
+            fileNamesAfterSelection = select_based_on_name_time(fileNamesAfterSelection, timeRange=timeRange)
         foundFileNames = fileNamesAfterSelection
     else:
         logging.debug("path does not exist: {}".format(path))
         foundFileNames = []
+    logging.debug('files meeting all criteria: {}'.format(foundFileNames))
     return foundFileNames
 
 ##

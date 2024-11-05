@@ -46,6 +46,7 @@ def plot_time_series(self, *args, scalex=True, scaley=True, data=None, **kwargs)
     except: enable = True
     y_major = mpl.ticker.MaxNLocator(nbins=4, min_n_ticks=3)
     self.yaxis.set_major_locator(y_major)
+    self.yaxis.set_minor_locator(mpl.ticker.AutoMinorLocator(5))
     if enable:
         if gap_threshold is None:
 #            gap_threshold = 5*np.min(tdiff)
@@ -591,13 +592,32 @@ def plot_PSD_spectrogram_from_partial_numberdensity(fig, ax, epochs, energy_tabl
 #    cbar = fig.colorbar(pcm_, cax=cax, orientation='vertical', location='right', extend='max', label=r'f [$\mathrm{s}^3\mathrm{km}^{-6}$]', ticks=mpl.ticker.LogLocator(base=10.0, numticks=3))
     ax.set_ylabel('E [eV]')
 
-def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02, ylabel='Energy', cbar_label='DEF'):
+def plot_omnidirectional_differential_energy_flux_spectrogram(fig, ax, epochs, energy_table, omnidirectional_differential_energy_flux, epoch_fmt='CDF_TIME_TT2000', vmin=None, vmax=None, cax_width=0.02, ylabel='Energy', cbar_label='DEF', interpolate_energy_table_when_non_identitical=True):
     '''
     this function work for mms fpi moms, mms1_dis_energyspectr_omni_fast
-
+    Parameters:
+        energy_table: ndarray of size [epochN, energyN]
+        omnidirectional_differential_energy_flux: ndarray of size [epochN, energyN]
     '''
     cax_gap = cax_width / 3
     data = omnidirectional_differential_energy_flux
+    if np.all(np.diff(energy_table, axis=0) == 0):
+        energy_table = energy_table[0]
+    else:
+        if interpolate_energy_table_when_non_identitical:
+            energy_table_std = energy_table[0]
+            data = np.copy(data)
+            for epoch_ind, energy_ in enumerate(energy_table):
+                data_ = data[epoch_ind]
+                if np.all(np.abs((energy_ - energy_table_std)/energy_table_std) < 10**(-5)):
+                    pass
+                else:
+                    data[epoch_ind] = dat.linear_interpolate_array(energy_table_std, energy_, data_)
+            energy_table = energy_table_std
+            logging.warning('non identitcal energy table, interpolated')
+        else:
+            raise Exception('non identitical energy table')
+
     tMesh, energyMesh = np.meshgrid(epochs.get_data(epoch_fmt), energy_table, indexing='ij')
     fUni = np.unique(data)
     if vmin is None:
@@ -660,6 +680,7 @@ def find_CDF_TIME_TT2000_xticks(datetimeRange, round_gap):
     xTicks = []
     while datetimeRange[1] > start_:
         xTicks.append(dat.Epochs(datetime=start_).get_data('CDF_TIME_TT2000')[0])
+#        print(start_)
         start_ += round_gap
     return xTicks
 

@@ -208,6 +208,26 @@ class maven:
         return t_3d, density, bulk_velocity, temperature
 
 
+def synchronize_data_from_spacecraft_for_gradient_calculation(spacecrafts, data_source='FGM', data_name='B', x_source='MEC89Q', x_name='x'):
+    '''
+    synchronize field data and position data
+    Parameters:
+        pass
+    Return:
+        resamplingT: 1d array the epochs for the resulted data
+        data_array: of size [len(resamplingT), len(spacecrafts), original_data.shape[1:]]
+        x_array: of size [len(resamplingT), len(spacecrafts), original_x.shape[1:]]
+    '''
+    t_data_list = [sc.data[data_source]['t'] for sc in spacecrafts]
+    data_list = [sc.data[data_source][data_name] for sc in spacecrafts]
+    t_x_list = [sc.data[x_source]['t'] for sc in spacecrafts]
+    x_list = [sc.data[x_source][x_name] for sc in spacecrafts]
+    resamplingT, resampled_data_list = data_synchronization(data_list+x_list, t_data_list+t_x_list, resamplingT=t_data_list[0])
+    data_array = np.concatenate([data[:, None, ...] for data in resampled_data_list[:len(spacecrafts)]], axis=1)
+    x_array = np.concatenate([data[:, None, ...] for data in resampled_data_list[len(spacecrafts):]], axis=1)
+    return resamplingT, data_array, x_array
+
+
 def butter_lowpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
     normal_cutoff = cutoff /nyq
@@ -245,6 +265,9 @@ def data_synchronization(data_list, t_list, minimum_gap_ratio=1.5, minimum_gap_a
     '''
     Purpose:
         pass
+    Parameters:
+        return_data_list: if True, return the data_list with time synchronized. If false, return a data array of size [t_size, len(data_list), data_shape[1:]]
+        resamplingT: if not given, the function will try to find the best resamplingT. 
     '''
     if resamplingT is None:
         resamplingT = define_synchronized_t(t_list=t_list, minimum_gap_ratio=minimum_gap_ratio, minimum_gap_abs=minimum_gap_abs)
@@ -1150,9 +1173,14 @@ def alfvenSpeed(BStrength, n):
     Return:
         alfvenSpeed: in km/s
     '''
-    alfvenSpeed = 21.812 * BStrength / np.sqrt(n)
+    alfvenSpeed = BStrength / np.sqrt(const.mu0 * const.m_p * n)
     return alfvenSpeed
 
+def sonicSpeed(T, gamma=5/3):
+    return (gamma * const.k_B * T / const.m_p)**(1/2)
+
+def magnetosonicSpeed(BStrength, n, T):
+    return np.sqrt(alfvenSpeed(BStrength, n)**2 + sonicSpeed(T)**2)
 
 ## Coordinates
 def cartesian2spherical(vectors):
@@ -1499,16 +1527,19 @@ def leastSquarePolynomialApproximationErrorEstimation(x, d, omega=None, dj=None)
     dg = np.linalg.norm(RInverse @ np.swapaxes(vandermondeMatrix, -1, -2) @ omega, axis=-1)[..., None] * dj[..., None, :]
     return dg
 
-def linearGradient(j, x, d, omega=None, regularizationMethod=None, regPara=None, solver='direct', numberOfIterations=1000):
+def linearGradient(j, x, d=1, omega=None, regularizationMethod=None, regPara=None, solver='direct', numberOfIterations=1000):
     xMean = np.mean(x, axis=-2)
     x = x - xMean[..., None, :]
-    coeff = leastSquarePolynomialApproximation(j, x, d=1, omega=omega)
+    coeff = leastSquarePolynomialApproximation(j, x, d=d, omega=omega)
     return coeff[..., 1:4, :]
 
-def curl(j, x, d, omega=None):
+def curl(j, x, d=1, omega=None):
     gradients = linearGradient(j, x, d, omega=omega)
     leviCivitaTensor = makeLeviCivitaTensor()
     return np.sum(np.sum(gradients[..., None] * leviCivitaTensor[None, ...], axis=-3), axis=-2)
+
+def div(j, x, d=1, omega=None):
+    return np.trace(linearGradient(j, x, d, omega=omega), axis1=-2, axis2=-1)
 
 def lsIterate(R, J, c, hBlock, d):
     h = c.shape[-1]
